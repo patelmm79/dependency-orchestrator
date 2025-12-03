@@ -1,0 +1,102 @@
+{
+  "version": "1.0.0",
+  "description": "Defines dependency relationships between repositories for the orchestrator service",
+  "relationships": {
+    "patelmm79/vllm-container-ngc": {
+      "type": "service_provider",
+      "description": "VLLM container service for NGC models",
+      "consumers": [
+        {
+          "repo": "patelmm79/resume-customizer",
+          "relationship_type": "api_consumer",
+          "description": "Resume customizer uses this LLM service for text generation",
+          "interface_files": [
+            "src/llm_client.py",
+            "config/llm_config.yaml",
+            "docker-compose.yml"
+          ],
+          "change_triggers": [
+            "api_contract",
+            "authentication",
+            "deployment",
+            "configuration",
+            "endpoints"
+          ],
+          "urgency_mapping": {
+            "api_contract": "critical",
+            "authentication": "high",
+            "deployment": "medium",
+            "configuration": "medium",
+            "endpoints": "high"
+          }
+        }
+      ],
+      "derivatives": [
+        {
+          "repo": "patelmm79/vllm-container-coder",
+          "relationship_type": "template_fork",
+          "description": "Coder-specific VLLM container derived from NGC template",
+          "shared_concerns": [
+            "infrastructure",
+            "docker",
+            "deployment",
+            "gpu_configuration",
+            "health_checks",
+            "logging",
+            "monitoring"
+          ],
+          "divergent_concerns": [
+            "application_logic",
+            "model_specific",
+            "api_endpoints",
+            "business_logic"
+          ],
+          "sync_strategy": "selective",
+          "bidirectional": true
+        }
+      ]
+    },
+    "patelmm79/vllm-container-coder": {
+      "type": "service_provider",
+      "description": "VLLM container service for code generation models",
+      "parent_template": {
+        "repo": "patelmm79/vllm-container-ngc",
+        "relationship_type": "template_fork",
+        "description": "Derived from NGC template",
+        "shared_concerns": [
+          "infrastructure",
+          "docker",
+          "deployment",
+          "gpu_configuration"
+        ],
+        "bidirectional": true
+      },
+      "consumers": []
+    }
+  },
+  "notification_settings": {
+    "default_urgency_thresholds": {
+      "critical": {
+        "action": "create_issue_immediately",
+        "labels": ["dependency", "urgent", "breaking-change"],
+        "notify_webhook": true
+      },
+      "high": {
+        "action": "create_issue_immediately",
+        "labels": ["dependency", "important"],
+        "notify_webhook": true
+      },
+      "medium": {
+        "action": "create_issue",
+        "labels": ["dependency", "enhancement"],
+        "notify_webhook": false
+      },
+      "low": {
+        "action": "add_to_digest",
+        "labels": ["dependency", "info"],
+        "notify_webhook": false
+      }
+    },
+    "digest_schedule": "weekly"
+  }
+}
