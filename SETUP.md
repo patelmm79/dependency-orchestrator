@@ -6,9 +6,20 @@ This guide walks you through deploying and configuring the dependency orchestrat
 
 - GCP account with billing enabled
 - `gcloud` CLI installed and authenticated
-- Docker installed locally
 - GitHub Personal Access Token with `repo` scope
 - Anthropic API key
+
+### Platform Requirements
+
+The deployment scripts are **bash scripts** and require a Unix-like environment:
+
+- **Linux/macOS**: Run scripts directly
+- **Windows**: Use one of these options:
+  - **WSL2** (Windows Subsystem for Linux) - Recommended
+  - **Git Bash** (comes with Git for Windows)
+  - **Cloud Shell** (run from GCP Console - no local setup needed!)
+
+**Note**: If using Windows, we recommend **GCP Cloud Shell** for the easiest setup - it has gcloud, Docker (for local option), and Terraform pre-installed.
 
 ## Step-by-Step Setup
 
@@ -79,43 +90,143 @@ Edit `config/relationships.json` to define your repository dependencies:
   - `api_endpoints`: API routes
   - `business_logic`: Domain-specific code
 
-### 2. Set Environment Variables
+### 2. Choose Your Deployment Method
 
-Create a `.env` file (don't commit this!):
+Three deployment options are available. Choose based on your needs:
 
+| Method | Best For | Requires Docker? | Secrets Storage | Setup Complexity |
+|--------|----------|------------------|-----------------|------------------|
+| **Terraform** | Infrastructure as code, team environments | No | Secret Manager | Medium |
+| **Cloud Build** | Production, no local Docker | No | Secret Manager | Low |
+| **Local Docker** | Quick development iteration | Yes | Command-line flags | Low |
+
+---
+
+### 3a. Deploy with Terraform (Recommended for new setups)
+
+**Best for**: Setting up infrastructure properly from the start, team environments
+
+#### Prerequisites
 ```bash
-# Required
+# Install Terraform (if not using Cloud Shell)
+# https://developer.hashicorp.com/terraform/downloads
+
+# Authenticate with GCP
+gcloud auth login
+gcloud auth application-default login
+```
+
+#### Setup
+```bash
+cd terraform
+
+# Copy and edit configuration
+cp terraform.tfvars.example terraform.tfvars
+
+# Edit terraform.tfvars with your values:
+# - project_id = "your-gcp-project-id"
+# - anthropic_api_key = "sk-ant-xxxxx"
+# - github_token = "ghp_xxxxx"
+# - webhook_url = "" (optional)
+```
+
+#### Deploy
+```bash
+# Initialize Terraform
+terraform init
+
+# Review what will be created
+terraform plan
+
+# Create infrastructure
+terraform apply
+```
+
+This creates:
+- Secret Manager secrets with IAM bindings
+- Cloud Run service
+- Enables required GCP APIs
+
+After Terraform completes, deploy your application code:
+```bash
+cd ..
+./deploy-gcp-cloudbuild.sh
+```
+
+See [terraform/README.md](terraform/README.md) for detailed Terraform documentation.
+
+---
+
+### 3b. Deploy with Cloud Build (Production-ready)
+
+**Best for**: Production deployments without local Docker
+
+#### Setup Secrets (one-time)
+```bash
 export GCP_PROJECT_ID="your-gcp-project-id"
 export ANTHROPIC_API_KEY="sk-ant-xxxxx"
 export GITHUB_TOKEN="ghp_xxxxx"
+export WEBHOOK_URL="https://discord.com/api/webhooks/xxxxx"  # optional
 
-# Optional
-export GCP_REGION="us-central1"
-export WEBHOOK_URL="https://discord.com/api/webhooks/xxxxx"
+# Create secrets in Secret Manager
+echo -n "$ANTHROPIC_API_KEY" | gcloud secrets create anthropic-api-key --data-file=-
+echo -n "$GITHUB_TOKEN" | gcloud secrets create github-token --data-file=-
+echo -n "$WEBHOOK_URL" | gcloud secrets create webhook-url --data-file=-
 ```
 
-Load them:
+#### Deploy
 ```bash
-source .env
+chmod +x deploy-gcp-cloudbuild.sh
+./deploy-gcp-cloudbuild.sh
 ```
 
-### 3. Deploy to GCP Cloud Run
+The script will:
+1. Validate secrets exist in Secret Manager
+2. Enable required GCP APIs
+3. Submit build to Cloud Build
+4. Deploy to Cloud Run with secret integration
 
-Run the deployment script:
+---
 
+### 3c. Deploy with Local Docker (Quick development)
+
+**Best for**: Fast development iteration, testing changes locally
+
+**Requires**: Docker installed locally (not needed if using Cloud Shell)
+
+#### Setup
+```bash
+# Set environment variables
+export GCP_PROJECT_ID="your-gcp-project-id"
+export GCP_REGION="us-central1"  # optional
+export ANTHROPIC_API_KEY="sk-ant-xxxxx"
+export GITHUB_TOKEN="ghp_xxxxx"
+export WEBHOOK_URL="https://discord.com/api/webhooks/xxxxx"  # optional
+
+# Authenticate Docker with GCP
+gcloud auth configure-docker
+```
+
+#### Deploy
 ```bash
 chmod +x deploy-gcp.sh
 ./deploy-gcp.sh
 ```
 
 The script will:
-1. Authenticate with GCP
-2. Build Docker image
-3. Push to Google Container Registry
-4. Deploy to Cloud Run
-5. Output your service URL
+1. Build Docker image locally
+2. Push to Google Container Registry
+3. Deploy to Cloud Run
+4. Output your service URL
 
-**Example output**:
+**Note**: Secrets are passed as environment variables (less secure than Secret Manager)
+
+---
+
+### Deployment Output
+
+All methods produce similar output:
+
 ```
 ✅ Deployment complete!
 🌐 Service URL: https://architecture-kb-orchestrator-abc123-uc.a.run.app
@@ -364,11 +475,21 @@ After making changes to the code:
 # Pull latest changes
 git pull
 
-# Redeploy
+# Redeploy based on your method:
+
+# If using Terraform + Cloud Build:
+./deploy-gcp-cloudbuild.sh
+
+# If using Cloud Build only:
+./deploy-gcp-cloudbuild.sh
+
+# If using Local Docker:
 ./deploy-gcp.sh
 ```
 
 The script will build a new image and deploy with zero downtime.
+
+**Note**: Terraform manages infrastructure (secrets, IAM, Cloud Run config). Use deployment scripts to update application code.
 
 ## Security Best Practices
 
