@@ -99,39 +99,55 @@ Edit `config/relationships.json` to define your repository dependencies:
 }
 ```
 
-### 3. Integrate with CI/CD
+### 3. Set Up GitHub Actions in Source Repositories
 
-#### Option A: With architecture-kb Pattern Analyzer
+**📖 Complete guide: [docs/GITHUB_ACTIONS_SETUP.md](docs/GITHUB_ACTIONS_SETUP.md)**
 
-If using [architecture-kb](https://github.com/patelmm79/architecture-kb) for pattern discovery:
+For each repository you want to monitor, set up GitHub Actions to notify the orchestrator:
 
-Add `ORCHESTRATOR_URL` secret to your monitored repository:
+#### Option A: With architecture-kb Pattern Analyzer (Recommended)
+
+```yaml
+# .github/workflows/pattern-monitoring.yml
+name: Pattern Monitoring
+on:
+  push:
+    branches: [main]
+
+jobs:
+  analyze:
+    uses: patelmm79/architecture-kb/.github/workflows/analyze-reusable.yml@main
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+      ORCHESTRATOR_URL: ${{ secrets.ORCHESTRATOR_URL }}
 ```
-Settings → Secrets → Actions → New secret
-Name: ORCHESTRATOR_URL
-Value: https://your-orchestrator-url.run.app
+
+#### Option B: Standalone Webhook
+
+```yaml
+# .github/workflows/notify-orchestrator.yml
+name: Notify Dependency Orchestrator
+on:
+  push:
+    branches: [main]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Send notification
+        run: |
+          curl -X POST ${{ secrets.ORCHESTRATOR_URL }}/api/webhook/change-notification \
+            -H "Content-Type: application/json" \
+            -d '{"source_repo": "${{ github.repository }}", ...}'
 ```
 
-The pattern analyzer will automatically notify the orchestrator.
-
-#### Option B: Standalone Integration
-
-Send a webhook from your CI/CD:
-
-```bash
-# After your build/test
-curl -X POST https://your-orchestrator-url.run.app/api/webhook/change-notification \
-  -H "Content-Type: application/json" \
-  -d '{
-    "source_repo": "yourname/repo",
-    "commit_sha": "'$GITHUB_SHA'",
-    "commit_message": "Your commit message",
-    "branch": "main",
-    "changed_files": [...],
-    "pattern_summary": {...},
-    "timestamp": "'$(date -u +%Y-%m-%dT%H:%M:%SZ)'"
-  }'
-```
+**See [GitHub Actions Setup Guide](docs/GITHUB_ACTIONS_SETUP.md) for**:
+- Step-by-step setup instructions
+- Complete workflow examples
+- Troubleshooting common issues
+- Advanced configuration options
 
 ## Configuration Reference
 
@@ -316,8 +332,10 @@ Scales with number of commits and triage analyses.
 ## Documentation
 
 - **[SETUP.md](SETUP.md)**: Detailed deployment guide
-- **[API.md](API.md)**: Complete API documentation
-- **[AGENTS.md](AGENTS.md)**: How triage agents work
+- **[docs/GITHUB_ACTIONS_SETUP.md](docs/GITHUB_ACTIONS_SETUP.md)**: GitHub Actions workflow setup guide
+- **[ARCHITECTURE.md](ARCHITECTURE.md)**: System architecture and implementation details
+- **[docs/AUTHENTICATION.md](docs/AUTHENTICATION.md)**: API authentication configuration
+- **[docs/COST_TRACKING.md](docs/COST_TRACKING.md)**: Cost tracking and optimization
 
 ## License
 

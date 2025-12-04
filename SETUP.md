@@ -278,24 +278,34 @@ curl https://your-service-url.run.app/api/relationships | jq
 
 ### 5. Configure Monitored Repositories
 
-For each repository in your relationships config:
+For each repository in your relationships config, you need to set up GitHub Actions to notify the orchestrator of changes.
 
-#### Add ORCHESTRATOR_URL Secret
+**📖 See [docs/GITHUB_ACTIONS_SETUP.md](docs/GITHUB_ACTIONS_SETUP.md) for complete step-by-step instructions.**
 
-1. Go to repository Settings → Secrets and variables → Actions
-2. Click "New repository secret"
-3. Name: `ORCHESTRATOR_URL`
-4. Value: Your Cloud Run service URL (e.g., `https://architecture-kb-orchestrator-abc123-uc.a.run.app`)
-5. Click "Add secret"
+The guide covers two options:
 
-#### Update Workflow (if needed)
+**Option A: With architecture-kb Pattern Analyzer** (Recommended)
+- Automatic AI-powered pattern detection
+- Detailed change analysis and context extraction
+- Simple reusable workflow setup
 
-If using the reusable workflow, it should already include the ORCHESTRATOR_URL. Verify your `.github/workflows/pattern-monitoring.yml` has:
+**Option B: Standalone Webhook**
+- Direct webhook notification
+- No additional API costs
+- Good for testing and simple setups
 
-```yaml
-secrets:
-  ORCHESTRATOR_URL: ${{ secrets.ORCHESTRATOR_URL }}
-```
+#### Quick Setup Summary
+
+1. **Add secrets to your source repository**:
+   - Go to Settings → Secrets and variables → Actions
+   - Add `ORCHESTRATOR_URL` secret with your Cloud Run URL
+   - For Option A: Also add `ANTHROPIC_API_KEY`
+
+2. **Create workflow file** (`.github/workflows/pattern-monitoring.yml` or `.github/workflows/notify-orchestrator.yml`)
+
+3. **Push and verify** the workflow runs successfully
+
+For detailed instructions, examples, and troubleshooting, see the [GitHub Actions Setup Guide](docs/GITHUB_ACTIONS_SETUP.md).
 
 ### 6. Test End-to-End
 
