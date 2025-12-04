@@ -9,7 +9,11 @@ github_token      = "ghp_xxxxx"
 # Optional variables (defaults are shown)
 region       = "us-central1"
 service_name = "architecture-kb-orchestrator"
-webhook_url  = "" # Discord/Slack webhook URL (optional)
+
+# Webhook URL for notifications (optional)
+# Leave as empty string "" if you don't want webhook notifications
+# If provided, must be a valid webhook URL
+webhook_url  = "" # Discord/Slack webhook URL - leave empty if not needed
 
 # Resource configuration
 memory                = "512Mi"

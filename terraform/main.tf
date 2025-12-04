@@ -55,6 +55,7 @@ resource "google_secret_manager_secret" "github_token" {
 }
 
 resource "google_secret_manager_secret" "webhook_url" {
+  count     = var.webhook_url != "" ? 1 : 0
   secret_id = "webhook-url"
 
   replication {
@@ -85,7 +86,8 @@ resource "google_secret_manager_secret_version" "github_token" {
 }
 
 resource "google_secret_manager_secret_version" "webhook_url" {
-  secret      = google_secret_manager_secret.webhook_url.id
+  count       = var.webhook_url != "" ? 1 : 0
+  secret      = google_secret_manager_secret.webhook_url[0].id
   secret_data = var.webhook_url
 
   lifecycle {
@@ -112,7 +114,8 @@ resource "google_secret_manager_secret_iam_member" "github_token_access" {
 }
 
 resource "google_secret_manager_secret_iam_member" "webhook_url_access" {
-  secret_id = google_secret_manager_secret.webhook_url.secret_id
+  count     = var.webhook_url != "" ? 1 : 0
+  secret_id = google_secret_manager_secret.webhook_url[0].secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${data.google_project.project.number}-compute@developer.gserviceaccount.com"
 }
@@ -156,12 +159,15 @@ resource "google_cloud_run_service" "orchestrator" {
           }
         }
 
-        env {
-          name = "WEBHOOK_URL"
-          value_from {
-            secret_key_ref {
-              name = google_secret_manager_secret.webhook_url.secret_id
-              key  = "latest"
+        dynamic "env" {
+          for_each = var.webhook_url != "" ? [1] : []
+          content {
+            name = "WEBHOOK_URL"
+            value_from {
+              secret_key_ref {
+                name = google_secret_manager_secret.webhook_url[0].secret_id
+                key  = "latest"
+              }
             }
           }
         }
@@ -188,7 +194,6 @@ resource "google_cloud_run_service" "orchestrator" {
     google_project_service.required_apis,
     google_secret_manager_secret_iam_member.anthropic_api_key_access,
     google_secret_manager_secret_iam_member.github_token_access,
-    google_secret_manager_secret_iam_member.webhook_url_access,
   ]
 
   lifecycle {
