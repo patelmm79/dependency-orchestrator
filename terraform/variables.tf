@@ -106,3 +106,15 @@ variable "github_repo_branch" {
   type        = string
   default     = "main"
 }
+
+# Labels for cost tracking and resource organization
+variable "labels" {
+  description = "Labels to apply to all resources for cost tracking and organization"
+  type        = map(string)
+  default = {
+    application = "dependency-orchestrator"
+    environment = "production"
+    managed-by  = "terraform"
+    component   = "orchestration"
+  }
+}

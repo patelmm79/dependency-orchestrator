@@ -36,6 +36,7 @@ resource "google_project_service" "required_apis" {
 # Create secrets in Secret Manager
 resource "google_secret_manager_secret" "anthropic_api_key" {
   secret_id = "anthropic-api-key"
+  labels    = merge(var.labels, { secret-type = "api-key" })
 
   replication {
     auto {}
@@ -46,6 +47,7 @@ resource "google_secret_manager_secret" "anthropic_api_key" {
 
 resource "google_secret_manager_secret" "github_token" {
   secret_id = "github-token"
+  labels    = merge(var.labels, { secret-type = "access-token" })
 
   replication {
     auto {}
@@ -56,6 +58,7 @@ resource "google_secret_manager_secret" "github_token" {
 
 resource "google_secret_manager_secret" "webhook_url" {
   secret_id = "webhook-url"
+  labels    = merge(var.labels, { secret-type = "webhook" })
 
   replication {
     auto {}
@@ -122,7 +125,15 @@ resource "google_cloud_run_service" "orchestrator" {
   name     = var.service_name
   location = var.region
 
+  metadata {
+    labels = var.labels
+  }
+
   template {
+    metadata {
+      labels = var.labels
+    }
+
     spec {
       service_account_name = "${data.google_project.project.number}-compute@developer.gserviceaccount.com"
 
@@ -231,6 +242,8 @@ resource "google_cloudbuild_trigger" "deploy_trigger" {
   substitutions = {
     _REGION = var.region
   }
+
+  tags = ["terraform-managed", "dependency-orchestrator"]
 
   depends_on = [google_project_service.required_apis]
 }

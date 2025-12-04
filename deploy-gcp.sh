@@ -60,7 +60,8 @@ gcloud run deploy $SERVICE_NAME \
   --memory 512Mi \
   --cpu 1 \
   --timeout 300 \
-  --max-instances 10
+  --max-instances 10 \
+  --labels application=dependency-orchestrator,environment=production,managed-by=gcloud-cli,component=orchestration
 
 # Get the service URL
 SERVICE_URL=$(gcloud run services describe $SERVICE_NAME --region $REGION --format 'value(status.url)')
