@@ -92,19 +92,31 @@ Edit `config/relationships.json` to define your repository dependencies:
 
 ### 2. Choose Your Deployment Method
 
-Three deployment options are available. Choose based on your needs:
+**IMPORTANT**: There are TWO separate steps in deployment:
+1. **Infrastructure Setup** (one-time): Create secrets, IAM, Cloud Run service
+2. **Application Deployment** (ongoing): Build and deploy your code
 
-| Method | Best For | Requires Docker? | Secrets Storage | Setup Complexity |
-|--------|----------|------------------|-----------------|------------------|
-| **Terraform** | Infrastructure as code, team environments | No | Secret Manager | Medium |
-| **Cloud Build** | Production, no local Docker | No | Secret Manager | Low |
-| **Local Docker** | Quick development iteration | Yes | Command-line flags | Low |
+You can mix and match these options:
+
+| Infrastructure Setup | Application Build | Best For | Notes |
+|---------------------|-------------------|----------|-------|
+| **Terraform** | Cloud Build | Production, IaC | Recommended for teams |
+| **Terraform** | Local Docker | Development with IaC | Good for iteration |
+| Manual (script does it) | Cloud Build | Quick production setup | Simpler but less reproducible |
+| Manual (script does it) | Local Docker | Quick dev setup | Fastest to get started |
 
 ---
 
-### 3a. Deploy with Terraform (Recommended for new setups)
+### 3a. OPTION 1: Terraform for Infrastructure (Recommended)
 
-**Best for**: Setting up infrastructure properly from the start, team environments
+**Use this if you want infrastructure as code, team collaboration, or reproducible setups.**
+
+#### What Terraform Does (Step 1 - Infrastructure)
+- Creates Secret Manager secrets
+- Configures IAM permissions
+- Creates Cloud Run service skeleton
+- Enables required GCP APIs
+- **Does NOT build or deploy your application code**
 
 #### Prerequisites
 ```bash
@@ -116,7 +128,7 @@ gcloud auth login
 gcloud auth application-default login
 ```
 
-#### Setup
+#### Setup Infrastructure
 ```bash
 cd terraform
 
@@ -128,10 +140,7 @@ cp terraform.tfvars.example terraform.tfvars
 # - anthropic_api_key = "sk-ant-xxxxx"
 # - github_token = "ghp_xxxxx"
 # - webhook_url = "" (optional)
-```
 
-#### Deploy
-```bash
 # Initialize Terraform
 terraform init
 
@@ -142,24 +151,32 @@ terraform plan
 terraform apply
 ```
 
-This creates:
-- Secret Manager secrets with IAM bindings
-- Cloud Run service
-- Enables required GCP APIs
+#### Deploy Application (Step 2 - Choose ONE)
 
-After Terraform completes, deploy your application code:
+After Terraform creates the infrastructure, deploy your application code:
+
+**Option A: Use Cloud Build** (no Docker needed locally)
 ```bash
 cd ..
 ./deploy-gcp-cloudbuild.sh
+```
+
+**Option B: Use Local Docker** (faster iteration)
+```bash
+cd ..
+export GCP_PROJECT_ID="your-project-id"
+./deploy-gcp.sh
 ```
 
 See [terraform/README.md](terraform/README.md) for detailed Terraform documentation.
 
 ---
 
-### 3b. Deploy with Cloud Build (Production-ready)
+### 3b. OPTION 2: Cloud Build Only (No Terraform)
 
-**Best for**: Production deployments without local Docker
+**Use this if you want a quick production setup without learning Terraform.**
+
+**What this does**: The script handles BOTH infrastructure setup AND application deployment in one command.
 
 #### Setup Secrets (one-time)
 ```bash
@@ -188,9 +205,11 @@ The script will:
 
 ---
 
-### 3c. Deploy with Local Docker (Quick development)
+### 3c. OPTION 3: Local Docker Only (No Terraform)
 
-**Best for**: Fast development iteration, testing changes locally
+**Use this for the fastest way to get started in development.**
+
+**What this does**: The script handles BOTH infrastructure setup AND application deployment, building Docker images locally.
 
 **Requires**: Docker installed locally (not needed if using Cloud Shell)
 

@@ -49,19 +49,29 @@ curl -X POST http://localhost:8080/api/test/template-triage \
 
 ### Deployment
 
-Three deployment options are available:
+**Two-Step Process:**
+1. **Infrastructure Setup** (one-time): Secrets, IAM, Cloud Run service skeleton
+2. **Application Deployment** (ongoing): Build and deploy your code
 
-#### Option 0: Terraform (Recommended for infrastructure setup)
+You can use Terraform for step 1, or let the deployment scripts handle both steps.
 
-Use Terraform to set up the complete GCP infrastructure including Secret Manager, IAM, and Cloud Run service.
+---
+
+#### Infrastructure Setup: Option A - Terraform (Recommended)
+
+**Use Terraform to manage infrastructure as code.**
+
+**What Terraform does:**
+- Enables required GCP APIs (cloudbuild, run, secretmanager)
+- Creates Secret Manager secrets with IAM bindings
+- Configures Cloud Run service account with secret access
+- Creates Cloud Run service skeleton (no application code yet)
+- **Does NOT build or deploy your application**
 
 **Prerequisites:**
 ```bash
 # Install Terraform
 # https://developer.hashicorp.com/terraform/downloads
-
-# Install gcloud CLI
-# https://cloud.google.com/sdk/docs/install
 
 # Authenticate with GCP
 gcloud auth login
@@ -91,26 +101,43 @@ terraform plan
 terraform apply
 ```
 
-**What Terraform manages:**
-- Enables required GCP APIs (cloudbuild, run, secretmanager)
-- Creates Secret Manager secrets with proper IAM bindings
-- Configures Cloud Run service account with secret access
-- Deploys Cloud Run service with placeholder image
-- (Optional) Sets up Cloud Build trigger for automatic deployments
+**After Terraform completes, deploy application code (choose one):**
 
-**After Terraform apply:**
-1. Build and deploy your application code using either deployment script
-2. Terraform tracks infrastructure state - use `terraform apply` to update config
-3. Update secrets via gcloud or Terraform
+Option A: Cloud Build (no Docker needed)
+```bash
+cd ..
+./deploy-gcp-cloudbuild.sh
+```
+
+Option B: Local Docker (faster iteration)
+```bash
+cd ..
+export GCP_PROJECT_ID="your-project-id"
+./deploy-gcp.sh
+```
 
 **Pros:** Infrastructure as code, reproducible, team collaboration, manages IAM properly
-**Cons:** Learning curve, requires Terraform knowledge, two-step deployment (infra + app)
+**Cons:** Learning curve, two-step process (infra then app)
 
 ---
 
-#### Option 1: Local Docker Build (Faster for development)
+#### Infrastructure Setup: Option B - Let Scripts Handle It
 
-Uses local Docker to build and push the image, then deploys to Cloud Run.
+**The deployment scripts can create infrastructure AND deploy the app in one step.**
+
+Skip to Option 1 or Option 2 below to let the scripts handle infrastructure setup automatically.
+
+---
+
+#### Application Deployment: Option 1 - Local Docker Build
+
+**Builds Docker image locally and deploys to Cloud Run.**
+
+**What this does:**
+- Builds Docker image on your machine
+- Pushes to Google Container Registry
+- Deploys to Cloud Run
+- Passes secrets as environment variables (not Secret Manager)
 
 **Prerequisites:**
 ```bash
@@ -146,9 +173,15 @@ chmod +x deploy-gcp.sh
 
 ---
 
-#### Option 2: Cloud Build (Recommended for production)
+#### Application Deployment: Option 2 - Cloud Build
 
-Uses Cloud Build to build the image remotely and deploy to Cloud Run with Secret Manager integration.
+**Builds Docker image remotely using Cloud Build and deploys to Cloud Run.**
+
+**What this does:**
+- Submits build to Cloud Build (builds in GCP, not locally)
+- Pushes to Google Container Registry
+- Deploys to Cloud Run
+- Uses Secret Manager for secrets (more secure)
 
 **Prerequisites:**
 ```bash
