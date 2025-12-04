@@ -55,7 +55,6 @@ steps:
 # Substitution variables with defaults
 substitutions:
   _REGION: 'us-central1'
-  _IMAGE_TAG: 'latest'  # Default tag when COMMIT_SHA is not available
 
 # Images to be pushed to Container Registry
 images:
