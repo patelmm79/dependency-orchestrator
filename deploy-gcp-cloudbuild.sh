@@ -94,9 +94,13 @@ done
 
 # Submit build to Cloud Build
 echo "☁️  Submitting build to Cloud Build..."
+# Generate a build tag using timestamp (since COMMIT_SHA is only available in triggered builds)
+BUILD_TAG=$(date +%Y%m%d-%H%M%S)
+echo "   Build tag: $BUILD_TAG"
+
 gcloud builds submit \
   --config=cloudbuild.yaml \
-  --substitutions=_REGION=$REGION \
+  --substitutions=_REGION=$REGION,COMMIT_SHA=$BUILD_TAG \
   --project=$PROJECT_ID
 
 # Get the service URL
