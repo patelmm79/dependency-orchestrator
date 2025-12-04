@@ -29,6 +29,78 @@
             "configuration": "medium",
             "endpoints": "high"
           }
+        },
+        {
+          "repo": "patelmm79/synthetic-log-generator",
+          "relationship_type": "api_consumer",
+          "description": "Synthetic log generator uses this LLM service for generating realistic log data",
+          "interface_files": [
+            "src/llm_client.py",
+            "config/llm_config.yaml",
+            "docker-compose.yml"
+          ],
+          "change_triggers": [
+            "api_contract",
+            "authentication",
+            "deployment",
+            "configuration",
+            "endpoints"
+          ],
+          "urgency_mapping": {
+            "api_contract": "critical",
+            "authentication": "high",
+            "deployment": "medium",
+            "configuration": "medium",
+            "endpoints": "high"
+          }
+        },
+        {
+          "repo": "patelmm79/agentic-log-attacker",
+          "relationship_type": "api_consumer",
+          "description": "Agentic log attacker uses this LLM service for generating adversarial log patterns",
+          "interface_files": [
+            "src/llm_client.py",
+            "config/llm_config.yaml",
+            "docker-compose.yml"
+          ],
+          "change_triggers": [
+            "api_contract",
+            "authentication",
+            "deployment",
+            "configuration",
+            "endpoints"
+          ],
+          "urgency_mapping": {
+            "api_contract": "critical",
+            "authentication": "high",
+            "deployment": "medium",
+            "configuration": "medium",
+            "endpoints": "high"
+          }
+        },
+        {
+          "repo": "patelmm79/ai_structured_search_summary",
+          "relationship_type": "api_consumer",
+          "description": "AI structured search summary uses this LLM service for generating search summaries",
+          "interface_files": [
+            "src/llm_client.py",
+            "config/llm_config.yaml",
+            "docker-compose.yml"
+          ],
+          "change_triggers": [
+            "api_contract",
+            "authentication",
+            "deployment",
+            "configuration",
+            "endpoints"
+          ],
+          "urgency_mapping": {
+            "api_contract": "critical",
+            "authentication": "high",
+            "deployment": "medium",
+            "configuration": "medium",
+            "endpoints": "high"
+          }
         }
       ],
       "derivatives": [
