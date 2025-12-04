@@ -3,8 +3,30 @@
 
 set -e
 
+# Try to get project ID from Terraform first, then environment variable, then gcloud config
+if [ -f "terraform/terraform.tfstate" ] && command -v terraform &> /dev/null; then
+  PROJECT_ID=$(cd terraform && terraform output -raw project_id 2>/dev/null || echo "")
+fi
+
+if [ -z "$PROJECT_ID" ]; then
+  PROJECT_ID="${GCP_PROJECT_ID}"
+fi
+
+if [ -z "$PROJECT_ID" ]; then
+  PROJECT_ID=$(gcloud config get-value project 2>/dev/null || echo "")
+fi
+
+if [ -z "$PROJECT_ID" ] || [ "$PROJECT_ID" = "your-project-id" ]; then
+  echo "❌ Error: Could not determine GCP project ID"
+  echo ""
+  echo "Please set it using one of these methods:"
+  echo "  1. Run terraform apply first (recommended)"
+  echo "  2. Set environment variable: export GCP_PROJECT_ID=\"your-project-id\""
+  echo "  3. Set gcloud config: gcloud config set project your-project-id"
+  exit 1
+fi
+
 # Configuration
-PROJECT_ID="${GCP_PROJECT_ID:-your-project-id}"
 SERVICE_NAME="architecture-kb-orchestrator"
 REGION="${GCP_REGION:-us-central1}"
 IMAGE_NAME="gcr.io/${PROJECT_ID}/${SERVICE_NAME}"
