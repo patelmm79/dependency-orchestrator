@@ -15,8 +15,8 @@ import anthropic
 from github import Github
 
 # Import triage agents
-from agents.consumer_triage import ConsumerTriageAgent
-from agents.template_triage import TemplateTriageAgent
+from orchestrator.agents.consumer_triage import ConsumerTriageAgent
+from orchestrator.agents.template_triage import TemplateTriageAgent
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -29,8 +29,19 @@ app = FastAPI(
 )
 
 # Initialize clients
-anthropic_client = anthropic.Anthropic(api_key=os.environ.get('ANTHROPIC_API_KEY'))
-github_client = Github(os.environ.get('GITHUB_TOKEN'))
+ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY')
+GITHUB_TOKEN = os.environ.get('GITHUB_TOKEN')
+
+if not ANTHROPIC_API_KEY:
+    logger.error("ANTHROPIC_API_KEY environment variable not set")
+    raise ValueError("ANTHROPIC_API_KEY is required")
+
+if not GITHUB_TOKEN:
+    logger.error("GITHUB_TOKEN environment variable not set")
+    raise ValueError("GITHUB_TOKEN is required")
+
+anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+github_client = Github(GITHUB_TOKEN)
 
 # Load relationships configuration
 config_path = Path(__file__).parent.parent / "config" / "relationships.json"
