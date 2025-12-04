@@ -1,0 +1,29 @@
+# Copy this file to terraform.tfvars and fill in your values
+# DO NOT commit terraform.tfvars to git (it contains secrets)
+
+# Required variables
+project_id        = "your-gcp-project-id"
+anthropic_api_key = "sk-ant-xxxxx"
+github_token      = "ghp_xxxxx"
+
+# Optional variables (defaults are shown)
+region       = "us-central1"
+service_name = "architecture-kb-orchestrator"
+webhook_url  = "" # Discord/Slack webhook URL (optional)
+
+# Resource configuration
+memory                = "512Mi"
+cpu                   = "1"
+timeout_seconds       = 300
+max_instances         = "10"
+min_instances         = "0"
+container_concurrency = 80
+
+# Access control
+allow_unauthenticated = true
+
+# Cloud Build trigger (optional - enables automatic deployments on git push)
+enable_cloud_build_trigger = false
+github_repo_owner          = "your-github-username"
+github_repo_name           = "dependency-orchestrator"
+github_repo_branch         = "main"

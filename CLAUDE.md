@@ -48,16 +48,165 @@ curl -X POST http://localhost:8080/api/test/template-triage \
 ```
 
 ### Deployment
+
+Three deployment options are available:
+
+#### Option 0: Terraform (Recommended for infrastructure setup)
+
+Use Terraform to set up the complete GCP infrastructure including Secret Manager, IAM, and Cloud Run service.
+
+**Prerequisites:**
 ```bash
-# Deploy to GCP Cloud Run
+# Install Terraform
+# https://developer.hashicorp.com/terraform/downloads
+
+# Install gcloud CLI
+# https://cloud.google.com/sdk/docs/install
+
+# Authenticate with GCP
+gcloud auth login
+gcloud auth application-default login
+
+# Navigate to terraform directory
+cd terraform
+
+# Copy example tfvars and configure
+cp terraform.tfvars.example terraform.tfvars
+# Edit terraform.tfvars with your values:
+#   - project_id
+#   - anthropic_api_key
+#   - github_token
+#   - webhook_url (optional)
+```
+
+**Deploy infrastructure:**
+```bash
+# Initialize Terraform
+terraform init
+
+# Review planned changes
+terraform plan
+
+# Apply configuration
+terraform apply
+```
+
+**What Terraform manages:**
+- Enables required GCP APIs (cloudbuild, run, secretmanager)
+- Creates Secret Manager secrets with proper IAM bindings
+- Configures Cloud Run service account with secret access
+- Deploys Cloud Run service with placeholder image
+- (Optional) Sets up Cloud Build trigger for automatic deployments
+
+**After Terraform apply:**
+1. Build and deploy your application code using either deployment script
+2. Terraform tracks infrastructure state - use `terraform apply` to update config
+3. Update secrets via gcloud or Terraform
+
+**Pros:** Infrastructure as code, reproducible, team collaboration, manages IAM properly
+**Cons:** Learning curve, requires Terraform knowledge, two-step deployment (infra + app)
+
+---
+
+#### Option 1: Local Docker Build (Faster for development)
+
+Uses local Docker to build and push the image, then deploys to Cloud Run.
+
+**Prerequisites:**
+```bash
+# Install gcloud CLI
+# https://cloud.google.com/sdk/docs/install
+
+# Authenticate with GCP
+gcloud auth login
+gcloud auth configure-docker
+
+# Set required environment variables (these will be passed to Cloud Run)
+export GCP_PROJECT_ID="your-gcp-project-id"
+export GCP_REGION="us-central1"  # optional, defaults to us-central1
+export ANTHROPIC_API_KEY="sk-ant-xxxxx"
+export GITHUB_TOKEN="ghp_xxxxx"
+export WEBHOOK_URL="https://discord.com/api/webhooks/xxxxx"  # optional
+```
+
+**Deploy:**
+```bash
 chmod +x deploy-gcp.sh
 ./deploy-gcp.sh
+```
 
-# View logs
-gcloud logging read "resource.labels.service_name=dependency-orchestrator" --limit 50
+**What it does:**
+1. Builds Docker image locally: `docker build -t gcr.io/$PROJECT_ID/architecture-kb-orchestrator .`
+2. Pushes to GCR: `docker push gcr.io/$PROJECT_ID/architecture-kb-orchestrator`
+3. Deploys to Cloud Run with `gcloud run deploy`, passing environment variables via `--set-env-vars`
+4. Configures: 512Mi memory, 1 CPU, 300s timeout, max 10 instances, unauthenticated access
+
+**Pros:** Faster builds, no GCP build quota usage, simpler for development
+**Cons:** Requires Docker locally, environment variables passed as flags (less secure)
+
+---
+
+#### Option 2: Cloud Build (Recommended for production)
+
+Uses Cloud Build to build the image remotely and deploy to Cloud Run with Secret Manager integration.
+
+**Prerequisites:**
+```bash
+# Install gcloud CLI
+# https://cloud.google.com/sdk/docs/install
+
+# Authenticate with GCP
+gcloud auth login
+
+# Set project
+export GCP_PROJECT_ID="your-gcp-project-id"
+export GCP_REGION="us-central1"  # optional, defaults to us-central1
+
+# Create secrets in Secret Manager (one-time setup)
+export ANTHROPIC_API_KEY="sk-ant-xxxxx"
+export GITHUB_TOKEN="ghp_xxxxx"
+export WEBHOOK_URL="https://discord.com/api/webhooks/xxxxx"
+
+echo -n "$ANTHROPIC_API_KEY" | gcloud secrets create anthropic-api-key --data-file=-
+echo -n "$GITHUB_TOKEN" | gcloud secrets create github-token --data-file=-
+echo -n "$WEBHOOK_URL" | gcloud secrets create webhook-url --data-file=-
+
+# To update existing secrets
+echo -n "$ANTHROPIC_API_KEY" | gcloud secrets versions add anthropic-api-key --data-file=-
+echo -n "$GITHUB_TOKEN" | gcloud secrets versions add github-token --data-file=-
+echo -n "$WEBHOOK_URL" | gcloud secrets versions add webhook-url --data-file=-
+```
+
+**Deploy:**
+```bash
+chmod +x deploy-gcp-cloudbuild.sh
+./deploy-gcp-cloudbuild.sh
+```
+
+**What it does:**
+1. Validates that required secrets exist in Secret Manager
+2. Enables required GCP APIs (cloudbuild, run, secretmanager)
+3. Grants Cloud Run service account access to secrets
+4. Submits build to Cloud Build using `cloudbuild.yaml`
+5. Cloud Build: builds image, pushes to GCR, deploys to Cloud Run
+6. Cloud Run pulls secrets from Secret Manager at runtime
+
+**Pros:** No Docker required locally, secrets managed securely, build logs in GCP, better for CI/CD
+**Cons:** Slower builds, uses Cloud Build quota, requires Secret Manager setup
+
+---
+
+#### View logs
+```bash
+# View recent logs
+gcloud logging read "resource.labels.service_name=architecture-kb-orchestrator" --limit 50
 
 # Stream logs in real-time
-gcloud logging tail "resource.labels.service_name=dependency-orchestrator"
+gcloud logging tail "resource.labels.service_name=architecture-kb-orchestrator"
+
+# View Cloud Build logs (Cloud Build option only)
+gcloud builds list --limit=5
+gcloud builds log <BUILD_ID>
 ```
 
 ## Architecture
