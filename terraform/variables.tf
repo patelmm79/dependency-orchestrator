@@ -40,6 +40,19 @@ variable "webhook_url" {
   default     = ""
 }
 
+variable "orchestrator_api_key" {
+  description = "API key for authenticating requests to the orchestrator (leave empty to auto-generate)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "require_authentication" {
+  description = "Require API key authentication for all endpoints (except health check)"
+  type        = bool
+  default     = false
+}
+
 variable "memory" {
   description = "Memory limit for Cloud Run service"
   type        = string

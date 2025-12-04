@@ -6,6 +6,10 @@ terraform {
       source  = "hashicorp/google"
       version = "~> 5.0"
     }
+    random = {
+      source  = "hashicorp/random"
+      version = "~> 3.0"
+    }
   }
 
   # Uncomment to use GCS backend for state management
@@ -67,6 +71,17 @@ resource "google_secret_manager_secret" "webhook_url" {
   depends_on = [google_project_service.required_apis]
 }
 
+resource "google_secret_manager_secret" "orchestrator_api_key" {
+  secret_id = "orchestrator-api-key"
+  labels    = merge(var.labels, { secret-type = "api-key" })
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.required_apis]
+}
+
 # Add secret versions (initial values)
 resource "google_secret_manager_secret_version" "anthropic_api_key" {
   secret      = google_secret_manager_secret.anthropic_api_key.id
@@ -96,6 +111,21 @@ resource "google_secret_manager_secret_version" "webhook_url" {
   }
 }
 
+# Generate random API key if not provided
+resource "random_password" "api_key" {
+  length  = 32
+  special = false
+}
+
+resource "google_secret_manager_secret_version" "orchestrator_api_key" {
+  secret      = google_secret_manager_secret.orchestrator_api_key.id
+  secret_data = var.orchestrator_api_key != "" ? var.orchestrator_api_key : random_password.api_key.result
+
+  lifecycle {
+    ignore_changes = [secret_data]
+  }
+}
+
 # Get project number for service account email
 data "google_project" "project" {
   depends_on = [google_project_service.required_apis]
@@ -116,6 +146,12 @@ resource "google_secret_manager_secret_iam_member" "github_token_access" {
 
 resource "google_secret_manager_secret_iam_member" "webhook_url_access" {
   secret_id = google_secret_manager_secret.webhook_url.secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${data.google_project.project.number}-compute@developer.gserviceaccount.com"
+}
+
+resource "google_secret_manager_secret_iam_member" "orchestrator_api_key_access" {
+  secret_id = google_secret_manager_secret.orchestrator_api_key.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${data.google_project.project.number}-compute@developer.gserviceaccount.com"
 }
@@ -175,6 +211,21 @@ resource "google_cloud_run_service" "orchestrator" {
               key  = "latest"
             }
           }
+        }
+
+        env {
+          name = "ORCHESTRATOR_API_KEY"
+          value_from {
+            secret_key_ref {
+              name = google_secret_manager_secret.orchestrator_api_key.secret_id
+              key  = "latest"
+            }
+          }
+        }
+
+        env {
+          name  = "REQUIRE_AUTH"
+          value = var.require_authentication ? "true" : "false"
         }
       }
 

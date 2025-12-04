@@ -6,10 +6,12 @@ Orchestrator Service - Coordinates dependency notifications and triage agents
 import os
 import json
 import logging
+import secrets
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional
-from fastapi import FastAPI, HTTPException, BackgroundTasks
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Security, Depends
+from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 import anthropic
 from github import Github
@@ -27,6 +29,39 @@ app = FastAPI(
     description="Dependency notification and triage orchestration service",
     version="1.0.0"
 )
+
+# API Key Authentication Setup
+API_KEY_HEADER = APIKeyHeader(name="X-API-Key", auto_error=False)
+ORCHESTRATOR_API_KEY = os.environ.get('ORCHESTRATOR_API_KEY')
+REQUIRE_AUTH = os.environ.get('REQUIRE_AUTH', 'false').lower() == 'true'
+
+# If auth is required but no API key is set, generate a warning
+if REQUIRE_AUTH and not ORCHESTRATOR_API_KEY:
+    logger.warning("REQUIRE_AUTH=true but ORCHESTRATOR_API_KEY not set. Authentication will fail!")
+
+async def verify_api_key(api_key: str = Security(API_KEY_HEADER)):
+    """Verify the API key from request header"""
+    # If auth not required, allow all requests
+    if not REQUIRE_AUTH:
+        return True
+
+    # If auth required, check the key
+    if not api_key or not ORCHESTRATOR_API_KEY:
+        raise HTTPException(
+            status_code=401,
+            detail="Missing or invalid API key",
+            headers={"WWW-Authenticate": "ApiKey"}
+        )
+
+    # Constant-time comparison to prevent timing attacks
+    if not secrets.compare_digest(api_key, ORCHESTRATOR_API_KEY):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid API key",
+            headers={"WWW-Authenticate": "ApiKey"}
+        )
+
+    return True
 
 # Initialize clients
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY')
@@ -73,21 +108,22 @@ class TriageResult(BaseModel):
 
 @app.get("/")
 async def root():
-    """Health check endpoint"""
+    """Health check endpoint (public, no auth required)"""
     return {
         "service": "Architecture KB Orchestrator",
         "status": "healthy",
-        "version": "1.0.0"
+        "version": "1.0.0",
+        "authentication_required": REQUIRE_AUTH
     }
 
 
-@app.get("/api/relationships")
+@app.get("/api/relationships", dependencies=[Depends(verify_api_key)])
 async def get_relationships():
     """Get all configured relationships"""
     return RELATIONSHIPS_CONFIG
 
 
-@app.get("/api/relationships/{repo_owner}/{repo_name}")
+@app.get("/api/relationships/{repo_owner}/{repo_name}", dependencies=[Depends(verify_api_key)])
 async def get_repo_relationships(repo_owner: str, repo_name: str):
     """Get relationships for a specific repository"""
     repo_full_name = f"{repo_owner}/{repo_name}"
@@ -98,7 +134,7 @@ async def get_repo_relationships(repo_owner: str, repo_name: str):
     return RELATIONSHIPS_CONFIG['relationships'][repo_full_name]
 
 
-@app.post("/api/webhook/change-notification")
+@app.post("/api/webhook/change-notification", dependencies=[Depends(verify_api_key)])
 async def handle_change_notification(event: ChangeEvent, background_tasks: BackgroundTasks):
     """
     Handle incoming change notifications from repositories.
@@ -374,7 +410,7 @@ async def send_webhook_notification(
         logger.error(f"Error sending webhook notification: {e}", exc_info=True)
 
 
-@app.post("/api/test/consumer-triage")
+@app.post("/api/test/consumer-triage", dependencies=[Depends(verify_api_key)])
 async def test_consumer_triage(
     source_repo: str,
     consumer_repo: str,
@@ -408,7 +444,7 @@ async def test_consumer_triage(
     return result
 
 
-@app.post("/api/test/template-triage")
+@app.post("/api/test/template-triage", dependencies=[Depends(verify_api_key)])
 async def test_template_triage(
     template_repo: str,
     derivative_repo: str,

@@ -31,10 +31,22 @@ output "cloud_run_service_account" {
 output "secret_ids" {
   description = "Secret Manager secret IDs"
   value = {
-    anthropic_api_key = google_secret_manager_secret.anthropic_api_key.secret_id
-    github_token      = google_secret_manager_secret.github_token.secret_id
-    webhook_url       = google_secret_manager_secret.webhook_url.secret_id
+    anthropic_api_key    = google_secret_manager_secret.anthropic_api_key.secret_id
+    github_token         = google_secret_manager_secret.github_token.secret_id
+    webhook_url          = google_secret_manager_secret.webhook_url.secret_id
+    orchestrator_api_key = google_secret_manager_secret.orchestrator_api_key.secret_id
   }
+}
+
+output "generated_api_key" {
+  description = "Auto-generated API key (only shown if not provided in variables)"
+  value       = var.orchestrator_api_key == "" ? nonsensitive(random_password.api_key.result) : "*****(provided by user)*****"
+  sensitive   = false
+}
+
+output "authentication_enabled" {
+  description = "Whether API key authentication is required"
+  value       = var.require_authentication
 }
 
 output "container_image" {
