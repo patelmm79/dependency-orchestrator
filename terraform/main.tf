@@ -168,6 +168,10 @@ resource "google_cloud_run_service" "orchestrator" {
   template {
     metadata {
       labels = var.labels
+      annotations = {
+        "autoscaling.knative.dev/maxScale" = var.max_instances
+        "autoscaling.knative.dev/minScale" = var.min_instances
+      }
     }
 
     spec {
@@ -231,13 +235,6 @@ resource "google_cloud_run_service" "orchestrator" {
 
       container_concurrency = var.container_concurrency
       timeout_seconds       = var.timeout_seconds
-    }
-
-    metadata {
-      annotations = {
-        "autoscaling.knative.dev/maxScale" = var.max_instances
-        "autoscaling.knative.dev/minScale" = var.min_instances
-      }
     }
   }
 
