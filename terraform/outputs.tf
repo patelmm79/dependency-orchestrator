@@ -33,7 +33,7 @@ output "secret_ids" {
   value = {
     anthropic_api_key = google_secret_manager_secret.anthropic_api_key.secret_id
     github_token      = google_secret_manager_secret.github_token.secret_id
-    webhook_url       = var.webhook_url != "" ? google_secret_manager_secret.webhook_url[0].secret_id : "not-configured"
+    webhook_url       = google_secret_manager_secret.webhook_url.secret_id
   }
 }
 
