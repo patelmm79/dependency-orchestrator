@@ -324,8 +324,8 @@ async def send_webhook_notification(
 ):
     """Send notification via Discord/Slack webhook"""
     webhook_url = os.environ.get('WEBHOOK_URL')
-    if not webhook_url:
-        logger.warning("No webhook URL configured")
+    if not webhook_url or webhook_url == 'not-configured':
+        logger.info("Webhook notifications not configured, skipping")
         return
 
     try:
