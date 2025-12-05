@@ -216,22 +216,41 @@ Consider:
 4. **Deployment Changes**: Does the consumer need to update how it connects (ports, URLs, Docker configs)?
 5. **Non-Breaking Improvements**: Are there optional improvements the consumer should consider?
 
+**CRITICAL**: When specifying affected_files, you MUST:
+- Only list files that ACTUALLY EXIST in the consumer code context provided above
+- If a file doesn't exist, DO NOT list it as affected
+- Verify file paths match exactly what appears in the consumer code context
+- If you cannot find specific files, leave affected_files as an empty list and note this in your reasoning
+
+**CRITICAL**: When writing impact_summary and recommended_changes:
+- Lead with the MOST IMPORTANT change first (e.g., "New FastAPI gateway requires authentication" not "Port changed")
+- Be specific about what changed (e.g., "Added mandatory X-API-Key authentication via FastAPI gateway" not "Changed authentication")
+- Provide concrete verification steps (e.g., "Check if CUSTOM_LLM_BASE_URL points to this service")
+- Give precise instructions (e.g., "Change CUSTOM_LLM_BASE_URL from port 8080 to 8000" not "Update URLs")
+
 Respond ONLY with valid JSON in this exact format:
 {{
   "requires_action": true/false,
   "urgency": "critical|high|medium|low",
-  "impact_summary": "Brief 1-2 sentence summary of impact",
-  "affected_files": ["file1.py", "file2.yaml"],
-  "recommended_changes": "Detailed description of what needs to change in the consumer",
+  "impact_summary": "Start with THE KEY CHANGE in 1 sentence (e.g., 'Provider added FastAPI authentication gateway')",
+  "affected_files": ["only_files_that_actually_exist_in_consumer_code_context"],
+  "recommended_changes": "1. Specific verification step to check if consumer uses this service\n2. Exact change needed (e.g., update CUSTOM_LLM_BASE_URL=http://host:8000)\n3. Additional concrete actions",
   "confidence": 0.0-1.0,
-  "reasoning": "Explain your analysis and why you reached this conclusion"
+  "reasoning": "Start with your hypothesis about whether consumer uses provider. Then explain the technical details."
 }}
 
 **Urgency Levels**:
-- critical: Breaking change that will cause immediate failures
-- high: Breaking change that will cause issues soon
+- critical: Breaking change that will cause immediate failures (only if consumer definitely uses this service)
+- high: Breaking change that will cause issues soon (only if consumer likely uses this service)
 - medium: Non-breaking but important update needed
 - low: Optional improvement or informational
+
+**IMPORTANT**: If you cannot verify from the consumer code context whether they actually use this provider service:
+- Set requires_action=true (to be safe)
+- Set urgency='high' (not 'critical' since uncertain)
+- Start impact_summary with "IF you use {source_repo}, then..."
+- Start recommended_changes with "1. Verify if you use this service by checking..."
+- In reasoning, explain you cannot definitively determine usage from the code context provided
 
 Be conservative - only set requires_action=true if there's a genuine need for the consumer to take action.
 """

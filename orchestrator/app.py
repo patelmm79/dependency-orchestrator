@@ -308,35 +308,42 @@ async def create_github_issue(
         else:
             title = f"📋 Template Update Available: {source_repo}"
 
-        # Format issue body
-        body = f"""## Dependency Change Notification
+        # Format issue body with key change highlighted upfront
+        body = f"""## 🔔 Dependency Update: {source_repo}
 
-**Source Repository**: {source_repo}
-**Commit**: {event.commit_sha[:7]}
-**Branch**: {event.branch}
-**Urgency**: {result['urgency'].upper()}
-**Confidence**: {result['confidence']:.0%}
-
-### Impact Summary
+### ⚠️ Key Change
 {result['impact_summary']}
+
+**Urgency**: {result['urgency'].upper()} | **Confidence**: {result['confidence']:.0%}
+
+### 📋 What You Need To Do
+{result['recommended_changes']}
+
+### 📂 Files That May Need Updates
+{chr(10).join(f"- `{f}`" for f in result['affected_files']) if result['affected_files'] else "_No specific files identified - see verification steps above_"}
+
+---
+
+<details>
+<summary>📖 Technical Details & Analysis</summary>
+
+### Source Change Details
+- **Repository**: {source_repo}
+- **Commit**: [{event.commit_sha[:7]}](https://github.com/{source_repo}/commit/{event.commit_sha})
+- **Branch**: {event.branch}
 
 ### Commit Message
 ```
 {event.commit_message}
 ```
 
-### Recommended Changes
-{result['recommended_changes']}
-
-### Affected Files in This Repository
-{chr(10).join(f"- `{f}`" for f in result['affected_files']) if result['affected_files'] else "No specific files identified"}
-
-### Reasoning
+### Analysis Reasoning
 {result['reasoning']}
 
+</details>
+
 ---
-*This issue was automatically created by the Architecture KB Orchestrator*
-*Commit: [{event.commit_sha[:7]}](https://github.com/{source_repo}/commit/{event.commit_sha})*
+_🤖 Automatically created by [Architecture KB Orchestrator](https://github.com/{source_repo}/commit/{event.commit_sha})_
 """
 
         # Create the issue

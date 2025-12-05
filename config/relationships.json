@@ -11,9 +11,9 @@
           "relationship_type": "api_consumer",
           "description": "Resume customizer uses this LLM service for text generation",
           "interface_files": [
-            "src/llm_client.py",
-            "config/llm_config.yaml",
-            "docker-compose.yml"
+            "utils/llm_client.py",
+            ".env.example",
+            "README.md"
           ],
           "change_triggers": [
             "api_contract",
