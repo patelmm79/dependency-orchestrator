@@ -47,6 +47,18 @@ curl -X POST http://localhost:8080/api/test/template-triage \
   -d @test/template_test.json
 ```
 
+### Setting Up Source Repositories
+
+⚠️ **CRITICAL**: After deploying the orchestrator, you MUST configure GitHub Actions workflows in your source repositories (e.g., `vllm-container-ngc`) to send change notifications. Without this, the orchestrator won't receive any notifications.
+
+**Complete setup instructions**: `docs/GITHUB_ACTIONS_SETUP.md`
+
+This separate guide includes:
+- Full workflow files (not partial snippets)
+- Step-by-step secret configuration
+- Testing procedures
+- Troubleshooting tips
+
 ### Deployment
 
 **Two-Step Process:**

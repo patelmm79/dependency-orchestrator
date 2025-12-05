@@ -278,34 +278,44 @@ curl https://your-service-url.run.app/api/relationships | jq
 
 ### 5. Configure Monitored Repositories
 
-For each repository in your relationships config, you need to set up GitHub Actions to notify the orchestrator of changes.
+**⚠️ CRITICAL STEP - REQUIRED FOR ORCHESTRATOR TO WORK**
 
-**📖 See [docs/GITHUB_ACTIONS_SETUP.md](docs/GITHUB_ACTIONS_SETUP.md) for complete step-by-step instructions.**
+For each repository in your relationships config (e.g., `patelmm79/vllm-container-ngc`), you **MUST** set up a GitHub Actions workflow to notify the orchestrator when changes occur. Without this workflow, the orchestrator will never receive notifications and won't create any issues.
 
-The guide covers two options:
+**📖 COMPLETE GUIDE: [docs/GITHUB_ACTIONS_SETUP.md](docs/GITHUB_ACTIONS_SETUP.md)**
 
-**Option A: With architecture-kb Pattern Analyzer** (Recommended)
-- Automatic AI-powered pattern detection
-- Detailed change analysis and context extraction
-- Simple reusable workflow setup
+This separate guide contains:
+- ✅ **Full, copy-paste ready workflow files** (not just snippets!)
+- ✅ Detailed step-by-step setup instructions
+- ✅ How to add GitHub secrets
+- ✅ Testing and verification procedures
+- ✅ Troubleshooting common issues
+
+#### What You Need To Do
+
+**For EACH monitored repository** (defined in `relationships.json`):
+
+1. **Go to the [GitHub Actions Setup Guide](docs/GITHUB_ACTIONS_SETUP.md)**
+2. **Choose Option A or B** from the guide
+3. **Copy the COMPLETE workflow file** from the guide (not the snippets below)
+4. **Add required secrets** to the repository
+5. **Test the workflow** runs successfully
+
+#### Quick Reference (See Full Guide for Complete Code!)
+
+**Option A: With Pattern Analyzer** (Recommended)
+- File: `.github/workflows/pattern-monitoring.yml`
+- Secrets needed: `ORCHESTRATOR_URL`, `ANTHROPIC_API_KEY`
+- ✅ Simple setup with AI-powered analysis
+- 📄 **[See full workflow code in guide](docs/GITHUB_ACTIONS_SETUP.md#option-a-with-architecture-kb-pattern-analyzer-recommended)**
 
 **Option B: Standalone Webhook**
-- Direct webhook notification
-- No additional API costs
-- Good for testing and simple setups
+- File: `.github/workflows/notify-orchestrator.yml`
+- Secrets needed: `ORCHESTRATOR_URL`
+- ⚠️ Requires ~60 lines of workflow code for diff extraction
+- 📄 **[See full workflow code in guide](docs/GITHUB_ACTIONS_SETUP.md#option-b-standalone-webhook-no-pattern-analysis)**
 
-#### Quick Setup Summary
-
-1. **Add secrets to your source repository**:
-   - Go to Settings → Secrets and variables → Actions
-   - Add `ORCHESTRATOR_URL` secret with your Cloud Run URL
-   - For Option A: Also add `ANTHROPIC_API_KEY`
-
-2. **Create workflow file** (`.github/workflows/pattern-monitoring.yml` or `.github/workflows/notify-orchestrator.yml`)
-
-3. **Push and verify** the workflow runs successfully
-
-For detailed instructions, examples, and troubleshooting, see the [GitHub Actions Setup Guide](docs/GITHUB_ACTIONS_SETUP.md).
+**Do NOT use snippets from this file** - they are incomplete. Always refer to the [complete GitHub Actions Setup Guide](docs/GITHUB_ACTIONS_SETUP.md) for full workflow files.
 
 ### 6. Test End-to-End
 
