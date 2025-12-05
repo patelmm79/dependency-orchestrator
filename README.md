@@ -149,6 +149,8 @@ jobs:
 - Troubleshooting common issues
 - Advanced configuration options
 
+**📋 After setup, use [Verification Checklist](docs/VERIFICATION_CHECKLIST.md) to confirm everything works**
+
 ## Configuration Reference
 
 ### Change Triggers

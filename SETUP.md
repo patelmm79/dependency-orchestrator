@@ -344,6 +344,31 @@ git push
    - Go to dependent repository (e.g., resume-customizer)
    - Check Issues tab for new dependency notifications
 
+---
+
+## ✅ Verification Checklist
+
+**📋 For comprehensive step-by-step verification, see [docs/VERIFICATION_CHECKLIST.md](docs/VERIFICATION_CHECKLIST.md)**
+
+The verification checklist provides:
+- Health checks for orchestrator service
+- GitHub Actions workflow validation
+- Secret configuration verification
+- End-to-end flow testing
+- Troubleshooting for common issues
+
+**Quick verification**:
+```bash
+# Check if orchestrator is receiving webhooks
+gcloud logging read "resource.labels.service_name=architecture-kb-orchestrator AND httpRequest.requestMethod=\"POST\"" \
+  --limit 5 \
+  --format="table(timestamp,httpRequest.requestUrl,httpRequest.status)"
+```
+
+If you see POST requests to `/api/webhook/change-notification`, the integration is working! ✅
+
+---
+
 ## Local Development
 
 To run the orchestrator locally for testing:

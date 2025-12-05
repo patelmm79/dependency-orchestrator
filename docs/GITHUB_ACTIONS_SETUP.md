@@ -96,6 +96,15 @@ git push
    ```
 4. Check the workflow run to see pattern analysis and orchestrator notification
 
+**📋 For detailed verification steps, see [VERIFICATION_CHECKLIST.md](VERIFICATION_CHECKLIST.md)**
+
+This checklist provides step-by-step instructions to verify:
+- Orchestrator is running and healthy
+- Workflow is configured correctly
+- Secrets are set properly
+- Notifications are being sent and received
+- End-to-end flow is working
+
 ### Example Workflow Output
 
 When the workflow runs successfully, you'll see:
@@ -315,15 +324,49 @@ When the workflow runs successfully, you'll see:
 
 **Problem**: Workflow runs but orchestrator doesn't respond
 
+**Check workflow logs first**:
+1. Go to your workflow run in GitHub Actions
+2. Click on "analyze / analyze-patterns" job
+3. Expand "Run Pattern Analysis" step
+4. Look for one of these messages:
+   - `"No orchestrator URL configured, skipping dependency notification"` → Secret is NOT set
+   - `"✓ Orchestrator notified successfully"` → Working correctly
+   - `"⚠ Error notifying orchestrator: ..."` → URL or connection issue
+
 **Solutions**:
-1. Verify `ORCHESTRATOR_URL` secret is set correctly
-2. Test orchestrator health: `curl https://your-orchestrator-url/`
-3. Check orchestrator logs:
+1. **Verify `ORCHESTRATOR_URL` secret is set correctly**:
+   - Go to `https://github.com/YOUR_ORG/YOUR_REPO/settings/secrets/actions`
+   - Confirm `ORCHESTRATOR_URL` appears in the list
+   - If missing or incorrect, add/update it with your Cloud Run URL
+   - ⚠️ Must NOT have trailing slash (e.g., `https://your-url.run.app` not `https://your-url.run.app/`)
+
+2. **Get your orchestrator URL**:
    ```bash
-   gcloud logging read "resource.labels.service_name=architecture-kb-orchestrator" --limit 20
+   gcloud run services describe architecture-kb-orchestrator \
+     --region=us-central1 \
+     --format="value(status.url)"
    ```
-4. Verify the URL doesn't have trailing slashes
-5. Check if orchestrator requires authentication
+
+3. **Test orchestrator health**:
+   ```bash
+   curl https://your-orchestrator-url.run.app/
+   # Expected: {"service":"Architecture KB Orchestrator","status":"healthy",...}
+   ```
+
+4. **Check orchestrator logs**:
+   ```bash
+   gcloud logging read "resource.labels.service_name=architecture-kb-orchestrator AND httpRequest.requestMethod=\"POST\"" --limit 5
+   # Should show POST requests if notifications are arriving
+   ```
+
+5. **Test manually**:
+   ```bash
+   curl -X POST https://your-orchestrator-url.run.app/api/webhook/change-notification \
+     -H "Content-Type: application/json" \
+     -d '{"source_repo":"your-org/your-repo","commit_sha":"test","commit_message":"test","branch":"main","changed_files":[],"pattern_summary":{"keywords":[],"patterns":[]},"timestamp":"2025-12-04T00:00:00Z"}'
+   ```
+
+6. Check if orchestrator requires authentication (see [docs/AUTHENTICATION.md](AUTHENTICATION.md))
 
 ### Authentication Errors
 
