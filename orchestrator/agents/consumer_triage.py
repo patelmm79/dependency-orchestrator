@@ -190,6 +190,12 @@ class ConsumerTriageAgent:
 **Consumer Repository (Target)**: {consumer_repo}
 **Relationship**: API Consumer - the consumer depends on the provider's API/service
 
+**Architecture Context** (Critical for understanding relevance):
+{consumer_config.get('description', 'No architecture context provided')}
+
+This field tells you WHY this consumer depends on the provider and what role it plays in the consumer's architecture.
+Use this to determine if the changes affect the consumer's PRIMARY production use case or just optional features.
+
 **Provider Changes**:
 Commit Message: {source_changes.get('commit_message', '')}
 
@@ -236,11 +242,12 @@ Respond ONLY with valid JSON in this exact format:
   "affected_files": ["only_files_that_actually_exist_in_consumer_code_context"],
   "recommended_changes": "1. Specific verification step to check if consumer uses this service\n2. Exact change needed (e.g., update CUSTOM_LLM_BASE_URL=http://host:8000)\n3. Additional concrete actions",
   "confidence": 0.0-1.0,
-  "reasoning": "Start with your hypothesis about whether consumer uses provider. Then explain the technical details."
+  "reasoning": "Start with your hypothesis about whether consumer uses provider based on the Architecture Context. Then explain the technical details.",
+  "architecture_context": "Restate the architecture relationship and whether this is a PRIMARY or OPTIONAL dependency based on the description provided"
 }}
 
 **Urgency Levels**:
-- critical: Breaking change that will cause immediate failures (only if consumer definitely uses this service)
+- critical: Breaking change that will cause immediate failures (only if consumer definitely uses this service AS PRIMARY DEPENDENCY)
 - high: Breaking change that will cause issues soon (only if consumer likely uses this service)
 - medium: Non-breaking but important update needed
 - low: Optional improvement or informational
@@ -278,6 +285,7 @@ Be conservative - only set requires_action=true if there's a genuine need for th
             # Set defaults for optional fields
             result.setdefault('affected_files', [])
             result.setdefault('recommended_changes', '')
+            result.setdefault('architecture_context', '')
 
             logger.info(f"LLM analysis complete: action={result['requires_action']}, urgency={result['urgency']}")
 

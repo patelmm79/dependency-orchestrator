@@ -308,10 +308,22 @@ async def create_github_issue(
         else:
             title = f"📋 Template Update Available: {source_repo}"
 
-        # Format issue body with key change highlighted upfront
+        # Format issue body with architecture context and key change highlighted upfront
+        architecture_section = ""
+        if result.get('architecture_context'):
+            architecture_section = f"""## 🏗️ Architecture Context
+
+{result['architecture_context']}
+
+**Why This Matters**: This dependency is a core part of your architecture. Changes here likely affect your production deployment.
+
+---
+
+"""
+
         body = f"""## 🔔 Dependency Update: {source_repo}
 
-### ⚠️ Key Change
+{architecture_section}### ⚠️ Key Change
 {result['impact_summary']}
 
 **Urgency**: {result['urgency'].upper()} | **Confidence**: {result['confidence']:.0%}
