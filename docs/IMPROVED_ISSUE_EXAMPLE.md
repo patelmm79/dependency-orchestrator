@@ -109,7 +109,7 @@ The good news: OpenAI SDK (used by CustomLLMClient) already handles API keys cor
 </details>
 
 ---
-_🤖 Automatically created by [Architecture KB Orchestrator](https://github.com/patelmm79/vllm-container-ngc/commit/1865d05)_
+_🤖 Automatically created by [Dependency Orchestrator](https://github.com/patelmm79/vllm-container-ngc/commit/1865d05)_
 ```
 
 ### Improvements in New Format

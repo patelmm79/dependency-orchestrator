@@ -31,7 +31,7 @@ fi
 SERVICE_NAME="architecture-kb-orchestrator"
 REGION="${GCP_REGION:-us-central1}"
 
-echo "🚀 Deploying Architecture KB Orchestrator to GCP Cloud Run (via Cloud Build)"
+echo "🚀 Deploying Dependency Orchestrator to GCP Cloud Run (via Cloud Build)"
 echo "   Project: $PROJECT_ID"
 echo "   Region: $REGION"
 echo ""

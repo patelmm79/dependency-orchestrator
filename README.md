@@ -38,7 +38,7 @@ When you make a change to one repository, the orchestrator automatically:
 ## Architecture
 
 ```
-Pattern Analyzer (architecture-kb) → HTTP POST → Orchestrator Service
+Pattern Analyzer (dev-nexus) → HTTP POST → Orchestrator Service
                                                         ↓
                                         Load relationships.json
                                                         ↓
@@ -105,7 +105,7 @@ Edit `config/relationships.json` to define your repository dependencies:
 
 For each repository you want to monitor, set up GitHub Actions to notify the orchestrator:
 
-#### Option A: With architecture-kb Pattern Analyzer (Recommended)
+#### Option A: With dev-nexus Pattern Analyzer (Recommended)
 
 ```yaml
 # .github/workflows/pattern-monitoring.yml
@@ -116,7 +116,7 @@ on:
 
 jobs:
   analyze:
-    uses: patelmm79/architecture-kb/.github/workflows/analyze-reusable.yml@main
+    uses: patelmm79/dev-nexus/.github/workflows/analyze-reusable.yml@main
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       ORCHESTRATOR_URL: ${{ secrets.ORCHESTRATOR_URL }}
@@ -329,7 +329,7 @@ Scales with number of commits and triage analyses.
 
 ## Related Projects
 
-- **[architecture-kb](https://github.com/patelmm79/architecture-kb)**: Pattern discovery system that integrates with this orchestrator
+- **[dev-nexus](https://github.com/patelmm79/dev-nexus)**: Central knowledge nexus and pattern discovery system that integrates with this orchestrator
 
 ## Documentation
 

@@ -6,7 +6,7 @@ This guide provides step-by-step instructions for setting up GitHub Actions work
 
 The orchestrator needs to receive notifications when changes occur in your monitored repositories. There are two ways to set this up:
 
-1. **Option A: With architecture-kb Pattern Analyzer** (Recommended) - Uses the architecture-kb reusable workflow for automatic pattern detection
+1. **Option A: With dev-nexus Pattern Analyzer** (Recommended) - Uses the dev-nexus reusable workflow for automatic pattern detection
 2. **Option B: Standalone Webhook** - Direct webhook notification without pattern analysis
 
 ## Prerequisites
@@ -17,13 +17,13 @@ Before setting up GitHub Actions, ensure:
 - ✅ You have admin access to the source repositories you want to monitor
 - ✅ Repositories are configured in `config/relationships.json`
 
-## Option A: With architecture-kb Pattern Analyzer (Recommended)
+## Option A: With dev-nexus Pattern Analyzer (Recommended)
 
 **Use this if**: You want automatic pattern detection and detailed change analysis.
 
 ### What This Does
 
-The architecture-kb pattern analyzer:
+The dev-nexus pattern analyzer:
 - Analyzes your code changes automatically
 - Detects patterns (API changes, infrastructure updates, etc.)
 - Extracts relevant context from diffs
@@ -58,7 +58,7 @@ on:
 
 jobs:
   analyze:
-    uses: patelmm79/architecture-kb/.github/workflows/analyze-reusable.yml@main
+    uses: patelmm79/dev-nexus/.github/workflows/analyze-reusable.yml@main
     secrets:
       ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
       ORCHESTRATOR_URL: ${{ secrets.ORCHESTRATOR_URL }}
@@ -295,7 +295,7 @@ When the workflow runs successfully, you'll see:
 
 ## Comparison: Option A vs Option B
 
-| Feature | Option A (architecture-kb) | Option B (Standalone) |
+| Feature | Option A (dev-nexus) | Option B (Standalone) |
 |---------|---------------------------|----------------------|
 | **Pattern Detection** | ✅ Automatic AI-powered analysis | ❌ Manual keywords only |
 | **Context Extraction** | ✅ Detailed change summaries | ⚠️ Basic diff info |
@@ -384,7 +384,7 @@ When the workflow runs successfully, you'll see:
 **Solutions**:
 1. Check `ANTHROPIC_API_KEY` is valid
 2. Verify you have API credits remaining
-3. Check architecture-kb service status
+3. Check dev-nexus service status
 4. Try Option B as a fallback
 
 ### Issues Not Being Created
@@ -571,7 +571,7 @@ After setting up GitHub Actions:
 - [SETUP.md](../SETUP.md) - Main orchestrator setup guide
 - [README.md](../README.md) - Overview and quick start
 - [ARCHITECTURE.md](../ARCHITECTURE.md) - System architecture details
-- [architecture-kb](https://github.com/patelmm79/architecture-kb) - Pattern analyzer repository
+- [dev-nexus](https://github.com/patelmm79/dev-nexus) - Pattern analyzer and knowledge nexus repository
 
 ---
 

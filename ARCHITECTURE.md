@@ -1,6 +1,6 @@
 # Orchestrator Service Documentation
 
-The Architecture KB Orchestrator is a dependency management service that coordinates automated triage agents to assess the impact of changes across related repositories.
+The Dependency Orchestrator is a dependency management service that coordinates automated triage agents to assess the impact of changes across related repositories.
 
 ## Overview
 
@@ -199,7 +199,7 @@ Health check endpoint.
 **Response**:
 ```json
 {
-  "service": "Architecture KB Orchestrator",
+  "service": "Dependency Orchestrator",
   "status": "healthy",
   "version": "1.0.0"
 }

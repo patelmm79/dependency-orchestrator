@@ -307,7 +307,7 @@ This separate guide contains:
 - File: `.github/workflows/pattern-monitoring.yml`
 - Secrets needed: `ORCHESTRATOR_URL`, `ANTHROPIC_API_KEY`
 - ✅ Simple setup with AI-powered analysis
-- 📄 **[See full workflow code in guide](docs/GITHUB_ACTIONS_SETUP.md#option-a-with-architecture-kb-pattern-analyzer-recommended)**
+- 📄 **[See full workflow code in guide](docs/GITHUB_ACTIONS_SETUP.md#option-a-with-dev-nexus-pattern-analyzer-recommended)**
 
 **Option B: Standalone Webhook**
 - File: `.github/workflows/notify-orchestrator.yml`
@@ -588,7 +588,7 @@ The script will build a new image and deploy with zero downtime.
 
 - Check [ORCHESTRATOR.md](ORCHESTRATOR.md) for detailed documentation
 - Review [CLAUDE.md](CLAUDE.md) for architecture details
-- Open an issue in the architecture-kb repository
+- Open an issue in the dev-nexus repository
 - Check orchestrator logs for error messages
 
 ---

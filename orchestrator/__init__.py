@@ -1,5 +1,5 @@
 """
-Architecture KB Orchestrator Service
+Dependency Orchestrator Service
 """
 
 __version__ = "1.0.0"

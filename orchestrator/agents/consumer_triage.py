@@ -5,7 +5,7 @@ Consumer Triage Agent - Analyzes impact of API changes on consumer applications
 
 import json
 import logging
-from typing import Dict, List
+from typing import Dict, List, Optional
 import anthropic
 from github import Github
 
@@ -19,9 +19,15 @@ class ConsumerTriageAgent:
     Use Case: vllm-container-ngc changes → impact on resume-customizer
     """
 
-    def __init__(self, anthropic_client: anthropic.Anthropic, github_client: Github):
+    def __init__(
+        self,
+        anthropic_client: anthropic.Anthropic,
+        github_client: Github,
+        dev_nexus_client: Optional[object] = None
+    ):
         self.anthropic = anthropic_client
         self.github = github_client
+        self.dev_nexus = dev_nexus_client
 
     async def analyze(
         self,
@@ -47,13 +53,20 @@ class ConsumerTriageAgent:
         try:
             logger.info(f"Analyzing consumer impact: {source_repo} -> {consumer_repo}")
 
-            # 1. Fetch consumer repository code (interface files)
+            # 1. Query dev-nexus for architecture context (if available)
+            architecture_context = None
+            if self.dev_nexus:
+                architecture_context = await self.dev_nexus.get_architecture_context(source_repo)
+                if architecture_context:
+                    logger.info(f"Retrieved architecture context from dev-nexus for {source_repo}")
+
+            # 2. Fetch consumer repository code (interface files)
             consumer_code = await self._fetch_consumer_interface_code(
                 consumer_repo,
                 consumer_config.get('interface_files', [])
             )
 
-            # 2. Extract relevant changes from source
+            # 3. Extract relevant changes from source
             relevant_changes = self._filter_relevant_changes(
                 change_event,
                 consumer_config.get('change_triggers', [])
@@ -70,13 +83,14 @@ class ConsumerTriageAgent:
                     'reasoning': 'Changes do not match configured trigger patterns'
                 }
 
-            # 3. Use LLM to analyze impact
+            # 4. Use LLM to analyze impact
             analysis = await self._llm_analyze_impact(
                 source_repo=source_repo,
                 consumer_repo=consumer_repo,
                 source_changes=change_event,
                 consumer_code=consumer_code,
-                consumer_config=consumer_config
+                consumer_config=consumer_config,
+                architecture_context=architecture_context
             )
 
             return analysis
@@ -165,7 +179,8 @@ class ConsumerTriageAgent:
         consumer_repo: str,
         source_changes: Dict,
         consumer_code: Dict,
-        consumer_config: Dict
+        consumer_config: Dict,
+        architecture_context: Optional[str] = None
     ) -> Dict:
         """Use Claude to analyze the actual impact on the consumer"""
 
@@ -184,6 +199,11 @@ class ConsumerTriageAgent:
         for path, code in consumer_code.items():
             consumer_summary[path] = code[:2000]  # Truncate
 
+        # Build architecture context section
+        arch_context_section = consumer_config.get('description', 'No architecture context provided')
+        if architecture_context:
+            arch_context_section += f"\n\n**Additional Context from Dev-Nexus**:\n{architecture_context}"
+
         prompt = f"""You are analyzing the impact of changes in a service provider repository on a consumer application.
 
 **Provider Repository (Source)**: {source_repo}
@@ -191,7 +211,7 @@ class ConsumerTriageAgent:
 **Relationship**: API Consumer - the consumer depends on the provider's API/service
 
 **Architecture Context** (Critical for understanding relevance):
-{consumer_config.get('description', 'No architecture context provided')}
+{arch_context_section}
 
 This field tells you WHY this consumer depends on the provider and what role it plays in the consumer's architecture.
 Use this to determine if the changes affect the consumer's PRIMARY production use case or just optional features.

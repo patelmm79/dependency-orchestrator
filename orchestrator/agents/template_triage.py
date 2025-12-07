@@ -5,7 +5,7 @@ Template Triage Agent - Analyzes template/fork changes for sync opportunities
 
 import json
 import logging
-from typing import Dict, List
+from typing import Dict, List, Optional
 import anthropic
 from github import Github
 
@@ -19,9 +19,15 @@ class TemplateTriageAgent:
     Use Case: vllm-container-ngc changes → should vllm-container-coder adopt them?
     """
 
-    def __init__(self, anthropic_client: anthropic.Anthropic, github_client: Github):
+    def __init__(
+        self,
+        anthropic_client: anthropic.Anthropic,
+        github_client: Github,
+        dev_nexus_client: Optional[object] = None
+    ):
         self.anthropic = anthropic_client
         self.github = github_client
+        self.dev_nexus = dev_nexus_client
 
     async def analyze(
         self,

@@ -20,12 +20,15 @@ from github import Github
 from orchestrator.agents.consumer_triage import ConsumerTriageAgent
 from orchestrator.agents.template_triage import TemplateTriageAgent
 
+# Import dev-nexus client
+from orchestrator.clients.dev_nexus_client import DevNexusClient
+
 # Setup logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(
-    title="Architecture KB Orchestrator",
+    title="Dependency Orchestrator",
     description="Dependency notification and triage orchestration service",
     version="1.0.0"
 )
@@ -78,6 +81,10 @@ if not GITHUB_TOKEN:
 anthropic_client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
 github_client = Github(GITHUB_TOKEN)
 
+# Initialize dev-nexus client (optional integration)
+DEV_NEXUS_URL = os.environ.get('DEV_NEXUS_URL')
+dev_nexus_client = DevNexusClient(base_url=DEV_NEXUS_URL)
+
 # Load relationships configuration
 config_path = Path(__file__).parent.parent / "config" / "relationships.json"
 with open(config_path) as f:
@@ -110,7 +117,7 @@ class TriageResult(BaseModel):
 async def root():
     """Health check endpoint (public, no auth required)"""
     return {
-        "service": "Architecture KB Orchestrator",
+        "service": "Dependency Orchestrator",
         "status": "healthy",
         "version": "1.0.0",
         "authentication_required": REQUIRE_AUTH
@@ -192,7 +199,8 @@ async def process_consumer_relationship(event: ChangeEvent, consumer_config: Dic
         # Initialize consumer triage agent
         agent = ConsumerTriageAgent(
             anthropic_client=anthropic_client,
-            github_client=github_client
+            github_client=github_client,
+            dev_nexus_client=dev_nexus_client
         )
 
         # Run triage analysis
@@ -204,6 +212,16 @@ async def process_consumer_relationship(event: ChangeEvent, consumer_config: Dic
         )
 
         logger.info(f"Triage result for {consumer_config['repo']}: action_required={result['requires_action']}, urgency={result['urgency']}")
+
+        # Post lesson learned to dev-nexus
+        if dev_nexus_client.enabled and result.get('reasoning'):
+            await dev_nexus_client.post_lesson_learned(
+                repo=event.source_repo,
+                lesson=f"Consumer impact analysis: {result['impact_summary']}",
+                source_commit=event.commit_sha,
+                confidence=result.get('confidence', 0.8),
+                category="consumer_triage"
+            )
 
         # Take action based on result
         if result['requires_action']:
@@ -227,7 +245,8 @@ async def process_template_relationship(event: ChangeEvent, derivative_config: D
         # Initialize template triage agent
         agent = TemplateTriageAgent(
             anthropic_client=anthropic_client,
-            github_client=github_client
+            github_client=github_client,
+            dev_nexus_client=dev_nexus_client
         )
 
         # Run triage analysis
@@ -239,6 +258,16 @@ async def process_template_relationship(event: ChangeEvent, derivative_config: D
         )
 
         logger.info(f"Triage result for {derivative_config['repo']}: action_required={result['requires_action']}, urgency={result['urgency']}")
+
+        # Post lesson learned to dev-nexus
+        if dev_nexus_client.enabled and result.get('reasoning'):
+            await dev_nexus_client.post_lesson_learned(
+                repo=event.source_repo,
+                lesson=f"Template sync analysis: {result['impact_summary']}",
+                source_commit=event.commit_sha,
+                confidence=result.get('confidence', 0.8),
+                category="template_triage"
+            )
 
         # Take action based on result
         if result['requires_action']:
@@ -355,7 +384,7 @@ async def create_github_issue(
 </details>
 
 ---
-_🤖 Automatically created by [Architecture KB Orchestrator](https://github.com/{source_repo}/commit/{event.commit_sha})_
+_🤖 Automatically created by [Dependency Orchestrator](https://github.com/{source_repo}/commit/{event.commit_sha})_
 """
 
         # Create the issue

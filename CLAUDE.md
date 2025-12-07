@@ -16,7 +16,10 @@ pip install -r requirements.txt
 # Set required environment variables
 export ANTHROPIC_API_KEY="sk-ant-xxxxx"
 export GITHUB_TOKEN="ghp_xxxxx"
-export WEBHOOK_URL="https://discord.com/api/webhooks/xxxxx"  # optional
+
+# Optional environment variables
+export WEBHOOK_URL="https://discord.com/api/webhooks/xxxxx"  # Discord/Slack notifications
+export DEV_NEXUS_URL="https://dev-nexus-xxxxx-uc.a.run.app"  # Dev-nexus integration
 ```
 
 ### Running Locally
@@ -292,6 +295,36 @@ GitHub Actions (source repo)
 - Maps service providers to their consumers and derivatives
 - Specifies interface files, change triggers, and shared/divergent concerns
 - Configures urgency mappings and notification settings
+
+**orchestrator/clients/dev_nexus_client.py** - Integrates with dev-nexus knowledge base (optional):
+- Queries deployment patterns and architecture context before analysis
+- Posts lessons learned after each triage analysis
+- Enriches triage prompts with cross-repo knowledge
+- Enables continuous learning across the entire codebase ecosystem
+
+### Dev-Nexus Integration
+
+The orchestrator integrates with [dev-nexus](https://github.com/patelmm79/dev-nexus) (if configured) to:
+
+1. **Query Architecture Context**: Before analyzing changes, triage agents query dev-nexus for:
+   - Deployment platform information
+   - Recent lessons learned
+   - Reusable components identified
+   - Cross-repo pattern insights
+
+2. **Contribute Lessons Learned**: After analysis, agents post insights back to dev-nexus:
+   - Consumer impact patterns
+   - Template sync recommendations
+   - Breaking change detection learnings
+   - Confidence scores for future reference
+
+3. **Enrich Analysis**: Architecture context from dev-nexus is included in LLM prompts, improving:
+   - Accuracy of impact assessment
+   - Understanding of deployment dependencies
+   - Recognition of common patterns
+   - Confidence in recommendations
+
+**Configuration**: Set `DEV_NEXUS_URL` environment variable to enable integration. If not set, orchestrator works normally without dev-nexus features.
 
 ### Relationship Types
 

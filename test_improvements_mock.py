@@ -135,7 +135,7 @@ _No specific files identified - see verification steps above_
 </details>
 
 ---
-_🤖 Automatically created by [Architecture KB Orchestrator](https://github.com/patelmm79/vllm-container-ngc/commit/{test_event['commit_sha']})_
+_🤖 Automatically created by [Dependency Orchestrator](https://github.com/patelmm79/vllm-container-ngc/commit/{test_event['commit_sha']})_
 """
 
     print(new_issue)
