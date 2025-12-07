@@ -41,7 +41,13 @@
       "WebSearch",
       "WebFetch(domain:developers.googleblog.com)",
       "WebFetch(domain:codelabs.developers.google.com)",
-      "WebFetch(domain:www.cybage.com)"
+      "WebFetch(domain:www.cybage.com)",
+      "Bash(git remote:*)",
+      "Bash(gh repo create:*)",
+      "Bash(git branch:*)",
+      "Bash(git check-ignore:*)",
+      "Bash(ls:*)",
+      "Bash(git ls-files:*)"
     ],
     "deny": [],
     "ask": []
