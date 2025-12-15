@@ -154,9 +154,9 @@ locals {
 
     🔧 A2A Resources Created:
     - Backend: Redis Memorystore (secondary fallback)
-    - Redis Instance: ${google_redis_instance.task_queue[0].name} (${var.redis_memory_gb}GB)
+    - Redis Instance: ${try(google_redis_instance.task_queue[0].name, "N/A")} (${var.redis_memory_gb}GB)
     - VPC Connector: ${google_vpc_access_connector.backend_connector.name}
-    - Redis URL: redis://${google_redis_instance.task_queue[0].host}:${google_redis_instance.task_queue[0].port}/0
+    - Redis URL: redis://${try(google_redis_instance.task_queue[0].host, "N/A")}:${try(google_redis_instance.task_queue[0].port, "6379")}/0
 
     📋 Next steps:
     1. Build and deploy your container:
