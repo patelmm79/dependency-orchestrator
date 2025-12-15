@@ -40,8 +40,46 @@ resource "google_project_service" "required_apis" {
   disable_on_destroy = false
 }
 
-# Create secrets in Secret Manager
+# ============================================================================
+# Secret Manager - Conditional Creation
+# ============================================================================
+
+# Fetch existing secrets if create_secrets = false
+data "google_secret_manager_secret" "anthropic_api_key" {
+  count     = var.create_secrets ? 0 : 1
+  secret_id = "anthropic-api-key"
+  project   = var.project_id
+
+  depends_on = [google_project_service.required_apis]
+}
+
+data "google_secret_manager_secret" "github_token" {
+  count     = var.create_secrets ? 0 : 1
+  secret_id = "github-token"
+  project   = var.project_id
+
+  depends_on = [google_project_service.required_apis]
+}
+
+data "google_secret_manager_secret" "webhook_url" {
+  count     = var.create_secrets ? 0 : 1
+  secret_id = "webhook-url"
+  project   = var.project_id
+
+  depends_on = [google_project_service.required_apis]
+}
+
+data "google_secret_manager_secret" "orchestrator_api_key" {
+  count     = var.create_secrets ? 0 : 1
+  secret_id = "orchestrator-api-key"
+  project   = var.project_id
+
+  depends_on = [google_project_service.required_apis]
+}
+
+# Create new secrets if create_secrets = true
 resource "google_secret_manager_secret" "anthropic_api_key" {
+  count     = var.create_secrets ? 1 : 0
   secret_id = "anthropic-api-key"
   labels    = merge(var.labels, { secret-type = "api-key" })
 
@@ -53,6 +91,7 @@ resource "google_secret_manager_secret" "anthropic_api_key" {
 }
 
 resource "google_secret_manager_secret" "github_token" {
+  count     = var.create_secrets ? 1 : 0
   secret_id = "github-token"
   labels    = merge(var.labels, { secret-type = "access-token" })
 
@@ -64,6 +103,7 @@ resource "google_secret_manager_secret" "github_token" {
 }
 
 resource "google_secret_manager_secret" "webhook_url" {
+  count     = var.create_secrets ? 1 : 0
   secret_id = "webhook-url"
   labels    = merge(var.labels, { secret-type = "webhook" })
 
@@ -75,6 +115,7 @@ resource "google_secret_manager_secret" "webhook_url" {
 }
 
 resource "google_secret_manager_secret" "orchestrator_api_key" {
+  count     = var.create_secrets ? 1 : 0
   secret_id = "orchestrator-api-key"
   labels    = merge(var.labels, { secret-type = "api-key" })
 
@@ -85,9 +126,18 @@ resource "google_secret_manager_secret" "orchestrator_api_key" {
   depends_on = [google_project_service.required_apis]
 }
 
-# Add secret versions (initial values)
+# Unified secret references
+locals {
+  anthropic_api_key_secret    = var.create_secrets ? google_secret_manager_secret.anthropic_api_key[0] : data.google_secret_manager_secret.anthropic_api_key[0]
+  github_token_secret         = var.create_secrets ? google_secret_manager_secret.github_token[0] : data.google_secret_manager_secret.github_token[0]
+  webhook_url_secret          = var.create_secrets ? google_secret_manager_secret.webhook_url[0] : data.google_secret_manager_secret.webhook_url[0]
+  orchestrator_api_key_secret = var.create_secrets ? google_secret_manager_secret.orchestrator_api_key[0] : data.google_secret_manager_secret.orchestrator_api_key[0]
+}
+
+# Add secret versions (initial values) - only if creating new secrets
 resource "google_secret_manager_secret_version" "anthropic_api_key" {
-  secret      = google_secret_manager_secret.anthropic_api_key.id
+  count       = var.create_secrets ? 1 : 0
+  secret      = local.anthropic_api_key_secret.id
   secret_data = var.anthropic_api_key
 
   # Prevent secret from being stored in state if empty
@@ -97,7 +147,8 @@ resource "google_secret_manager_secret_version" "anthropic_api_key" {
 }
 
 resource "google_secret_manager_secret_version" "github_token" {
-  secret      = google_secret_manager_secret.github_token.id
+  count       = var.create_secrets ? 1 : 0
+  secret      = local.github_token_secret.id
   secret_data = var.github_token
 
   lifecycle {
@@ -106,7 +157,8 @@ resource "google_secret_manager_secret_version" "github_token" {
 }
 
 resource "google_secret_manager_secret_version" "webhook_url" {
-  secret      = google_secret_manager_secret.webhook_url.id
+  count       = var.create_secrets ? 1 : 0
+  secret      = local.webhook_url_secret.id
   secret_data = var.webhook_url != "" ? var.webhook_url : "not-configured"
 
   lifecycle {
@@ -121,7 +173,8 @@ resource "random_password" "api_key" {
 }
 
 resource "google_secret_manager_secret_version" "orchestrator_api_key" {
-  secret      = google_secret_manager_secret.orchestrator_api_key.id
+  count       = var.create_secrets ? 1 : 0
+  secret      = local.orchestrator_api_key_secret.id
   secret_data = var.orchestrator_api_key != "" ? var.orchestrator_api_key : random_password.api_key.result
 
   lifecycle {
@@ -136,25 +189,25 @@ data "google_project" "project" {
 
 # Grant Cloud Run service account access to secrets
 resource "google_secret_manager_secret_iam_member" "anthropic_api_key_access" {
-  secret_id = google_secret_manager_secret.anthropic_api_key.secret_id
+  secret_id = local.anthropic_api_key_secret.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${data.google_project.project.number}-compute@developer.gserviceaccount.com"
 }
 
 resource "google_secret_manager_secret_iam_member" "github_token_access" {
-  secret_id = google_secret_manager_secret.github_token.secret_id
+  secret_id = local.github_token_secret.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${data.google_project.project.number}-compute@developer.gserviceaccount.com"
 }
 
 resource "google_secret_manager_secret_iam_member" "webhook_url_access" {
-  secret_id = google_secret_manager_secret.webhook_url.secret_id
+  secret_id = local.webhook_url_secret.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${data.google_project.project.number}-compute@developer.gserviceaccount.com"
 }
 
 resource "google_secret_manager_secret_iam_member" "orchestrator_api_key_access" {
-  secret_id = google_secret_manager_secret.orchestrator_api_key.secret_id
+  secret_id = local.orchestrator_api_key_secret.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${data.google_project.project.number}-compute@developer.gserviceaccount.com"
 }
@@ -182,9 +235,17 @@ resource "random_password" "postgres_password" {
   special = false
 }
 
-# Secret for PostgreSQL password
+# PostgreSQL secret - conditional creation
+data "google_secret_manager_secret" "postgres_password" {
+  count     = var.use_postgresql && !var.create_secrets ? 1 : 0
+  secret_id = "postgres-password"
+  project   = var.project_id
+
+  depends_on = [google_project_service.required_apis]
+}
+
 resource "google_secret_manager_secret" "postgres_password" {
-  count     = var.use_postgresql ? 1 : 0
+  count     = var.use_postgresql && var.create_secrets ? 1 : 0
   secret_id = "postgres-password"
   labels    = merge(var.labels, { secret-type = "database-password" })
 
@@ -195,9 +256,15 @@ resource "google_secret_manager_secret" "postgres_password" {
   depends_on = [google_project_service.required_apis]
 }
 
+locals {
+  postgres_password_secret = var.use_postgresql ? (
+    var.create_secrets ? google_secret_manager_secret.postgres_password[0] : data.google_secret_manager_secret.postgres_password[0]
+  ) : null
+}
+
 resource "google_secret_manager_secret_version" "postgres_password" {
-  count       = var.use_postgresql ? 1 : 0
-  secret      = google_secret_manager_secret.postgres_password[0].id
+  count       = var.use_postgresql && var.create_secrets ? 1 : 0
+  secret      = local.postgres_password_secret.id
   secret_data = var.postgres_password != "" ? var.postgres_password : random_password.postgres_password.result
 
   lifecycle {
@@ -208,7 +275,7 @@ resource "google_secret_manager_secret_version" "postgres_password" {
 # Grant Cloud Run access to PostgreSQL password secret
 resource "google_secret_manager_secret_iam_member" "postgres_password_access" {
   count     = var.use_postgresql ? 1 : 0
-  secret_id = google_secret_manager_secret.postgres_password[0].secret_id
+  secret_id = local.postgres_password_secret.secret_id
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${data.google_project.project.number}-compute@developer.gserviceaccount.com"
 }
@@ -309,7 +376,7 @@ resource "google_cloud_run_service" "orchestrator" {
           name = "ANTHROPIC_API_KEY"
           value_from {
             secret_key_ref {
-              name = google_secret_manager_secret.anthropic_api_key.secret_id
+              name = local.anthropic_api_key_secret.secret_id
               key  = "latest"
             }
           }
@@ -319,7 +386,7 @@ resource "google_cloud_run_service" "orchestrator" {
           name = "GITHUB_TOKEN"
           value_from {
             secret_key_ref {
-              name = google_secret_manager_secret.github_token.secret_id
+              name = local.github_token_secret.secret_id
               key  = "latest"
             }
           }
@@ -329,7 +396,7 @@ resource "google_cloud_run_service" "orchestrator" {
           name = "WEBHOOK_URL"
           value_from {
             secret_key_ref {
-              name = google_secret_manager_secret.webhook_url.secret_id
+              name = local.webhook_url_secret.secret_id
               key  = "latest"
             }
           }
@@ -339,7 +406,7 @@ resource "google_cloud_run_service" "orchestrator" {
           name = "ORCHESTRATOR_API_KEY"
           value_from {
             secret_key_ref {
-              name = google_secret_manager_secret.orchestrator_api_key.secret_id
+              name = local.orchestrator_api_key_secret.secret_id
               key  = "latest"
             }
           }
@@ -395,7 +462,7 @@ resource "google_cloud_run_service" "orchestrator" {
             name = "POSTGRES_PASSWORD"
             value_from {
               secret_key_ref {
-                name = google_secret_manager_secret.postgres_password[0].secret_id
+                name = local.postgres_password_secret.secret_id
                 key  = "latest"
               }
             }

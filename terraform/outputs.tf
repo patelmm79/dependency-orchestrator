@@ -31,10 +31,10 @@ output "cloud_run_service_account" {
 output "secret_ids" {
   description = "Secret Manager secret IDs"
   value = {
-    anthropic_api_key    = google_secret_manager_secret.anthropic_api_key.secret_id
-    github_token         = google_secret_manager_secret.github_token.secret_id
-    webhook_url          = google_secret_manager_secret.webhook_url.secret_id
-    orchestrator_api_key = google_secret_manager_secret.orchestrator_api_key.secret_id
+    anthropic_api_key    = local.anthropic_api_key_secret.secret_id
+    github_token         = local.github_token_secret.secret_id
+    webhook_url          = local.webhook_url_secret.secret_id
+    orchestrator_api_key = local.orchestrator_api_key_secret.secret_id
   }
 }
 

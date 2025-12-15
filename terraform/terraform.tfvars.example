@@ -9,6 +9,13 @@ anthropic_api_key = "sk-ant-xxxxx"
 github_token      = "ghp_xxxxx"
 
 # ============================================================================
+# Secret Manager Configuration
+# ============================================================================
+# Set to false if secrets already exist in Secret Manager
+# This prevents Terraform errors when secrets are already created
+create_secrets = true  # Set to false to use existing secrets
+
+# ============================================================================
 # Optional Variables (defaults are shown)
 # ============================================================================
 region       = "us-central1"

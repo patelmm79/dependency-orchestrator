@@ -3,6 +3,12 @@ variable "project_id" {
   type        = string
 }
 
+variable "create_secrets" {
+  description = "Create new secrets in Secret Manager (set to false if secrets already exist)"
+  type        = bool
+  default     = true
+}
+
 variable "region" {
   description = "GCP region for Cloud Run service"
   type        = string
