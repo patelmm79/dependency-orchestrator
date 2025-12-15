@@ -51,17 +51,19 @@ steps:
       - 'GITHUB_TOKEN=github-token:latest'
       - '--update-secrets'
       - 'WEBHOOK_URL=webhook-url:latest'
+      - '--update-secrets'
+      - 'POSTGRES_PASSWORD=POSTGRES_PASSWORD:latest'
       - '--vpc-connector'
-      - 'orchestrator-redis-connector'
+      - 'orch-backend-conn'
       - '--set-env-vars'
-      - 'REDIS_URL=${_REDIS_URL}'
+      - 'USE_POSTGRESQL=true,POSTGRES_HOST=${_POSTGRES_HOST},POSTGRES_PORT=5432,POSTGRES_DB=orchestrator,POSTGRES_USER=orchestrator'
       - '--labels'
       - 'application=dependency-orchestrator,environment=production,managed-by=cloud-build,component=orchestration,a2a-enabled=true'
 
 # Substitution variables with defaults
 substitutions:
   _REGION: 'us-central1'
-  _REDIS_URL: 'redis://10.0.0.3:6379/0'  # Update with actual Redis host after setup-redis-memorystore.sh
+  _POSTGRES_HOST: '10.128.0.42'  # PostgreSQL VM internal IP
 
 # Images to be pushed to Container Registry
 images:
