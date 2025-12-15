@@ -129,14 +129,17 @@ locals {
     POSTGRES_PORT=5432
     POSTGRES_DB=orchestrator
     POSTGRES_USER=orchestrator
-    POSTGRES_PASSWORD=${var.postgres_password != "" ? "*****(set)" : random_password.postgres_password.result}
+    POSTGRES_PASSWORD=<see Secret Manager: postgres-password>
 
     ⚠️  Initialize database schema:
-    1. Copy schema to VM:
+    1. Get password from Secret Manager:
+       gcloud secrets versions access latest --secret=postgres-password
+
+    2. Copy schema to VM:
        gcloud compute scp orchestrator/a2a/postgres_schema.sql orchestrator-postgres-vm:/tmp/ --zone=${var.region}-a
 
-    2. Initialize schema:
-       gcloud compute ssh orchestrator-postgres-vm --zone=${var.region}-a --command="PGPASSWORD='${var.postgres_password != "" ? var.postgres_password : random_password.postgres_password.result}' psql -h localhost -U orchestrator -d orchestrator -f /tmp/postgres_schema.sql"
+    3. Initialize schema (replace PASSWORD with value from step 1):
+       gcloud compute ssh orchestrator-postgres-vm --zone=${var.region}-a --command="PGPASSWORD='PASSWORD' psql -h localhost -U orchestrator -d orchestrator -f /tmp/postgres_schema.sql"
 
     📋 Next steps:
     1. Build and deploy your container:
