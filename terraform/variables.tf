@@ -180,9 +180,9 @@ variable "vpc_network" {
 }
 
 variable "vpc_connector_name" {
-  description = "Name of the VPC connector for Cloud Run to Redis"
+  description = "Name of the VPC connector for Cloud Run to backend (max 25 chars, lowercase/hyphens only)"
   type        = string
-  default     = "orchestrator-redis-connector"
+  default     = "orch-backend-conn"
 }
 
 variable "vpc_connector_cidr" {

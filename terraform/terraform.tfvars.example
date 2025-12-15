@@ -66,7 +66,7 @@ postgres_disk_size_gb    = 30         # Storage size
 
 # Redis Configuration (if use_postgresql = false)
 vpc_network          = "default"
-vpc_connector_name   = "orchestrator-backend-connector"
+vpc_connector_name   = "orch-backend-conn"  # Max 25 chars, lowercase/hyphens only
 vpc_connector_cidr   = "10.8.0.0/28"  # Ensure no overlap with existing VPC ranges
 
 redis_instance_name  = "orchestrator-task-queue"
