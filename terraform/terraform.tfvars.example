@@ -16,6 +16,13 @@ github_token      = "ghp_xxxxx"
 create_secrets = true  # Set to false to use existing secrets
 
 # ============================================================================
+# Deployment Configuration
+# ============================================================================
+# Automatically build and deploy Docker image during terraform apply
+# Set to false to build/deploy manually using deploy scripts
+auto_build = true  # ONE-STEP DEPLOYMENT: Terraform builds + deploys everything
+
+# ============================================================================
 # Optional Variables (defaults are shown)
 # ============================================================================
 region       = "us-central1"

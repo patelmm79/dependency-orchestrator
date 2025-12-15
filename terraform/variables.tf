@@ -9,6 +9,12 @@ variable "create_secrets" {
   default     = true
 }
 
+variable "auto_build" {
+  description = "Automatically build and deploy Docker image during terraform apply"
+  type        = bool
+  default     = true
+}
+
 variable "region" {
   description = "GCP region for Cloud Run service"
   type        = string

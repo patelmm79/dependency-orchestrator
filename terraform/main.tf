@@ -339,6 +339,45 @@ resource "google_redis_instance" "task_queue" {
   depends_on = [google_project_service.required_apis]
 }
 
+# ============================================================================
+# Docker Image Build (Automatic)
+# ============================================================================
+
+# Build Docker image using Cloud Build
+resource "null_resource" "build_image" {
+  count = var.auto_build ? 1 : 0
+
+  triggers = {
+    # Rebuild when this file changes (add more source files if needed)
+    build_script = filemd5("${path.module}/../cloudbuild.yaml")
+    dockerfile   = filemd5("${path.module}/../Dockerfile")
+    # Force rebuild on each apply - remove if you want to build only on code changes
+    always_run = timestamp()
+  }
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      echo "Building Docker image with Cloud Build..."
+      gcloud builds submit \
+        --config=${path.module}/../cloudbuild.yaml \
+        --substitutions=_REGION=${var.region} \
+        --project=${var.project_id} \
+        ${path.module}/..
+    EOT
+  }
+
+  depends_on = [
+    google_project_service.required_apis,
+    google_secret_manager_secret_iam_member.anthropic_api_key_access,
+    google_secret_manager_secret_iam_member.github_token_access
+  ]
+}
+
+# Local variable for image name
+locals {
+  image_name = "gcr.io/${var.project_id}/${var.service_name}:latest"
+}
+
 # Cloud Run service
 resource "google_cloud_run_service" "orchestrator" {
   name     = var.service_name
@@ -363,7 +402,7 @@ resource "google_cloud_run_service" "orchestrator" {
       service_account_name = "${data.google_project.project.number}-compute@developer.gserviceaccount.com"
 
       containers {
-        image = var.container_image
+        image = var.auto_build ? local.image_name : var.container_image
 
         resources {
           limits = {
@@ -499,11 +538,13 @@ resource "google_cloud_run_service" "orchestrator" {
     google_secret_manager_secret_iam_member.anthropic_api_key_access,
     google_secret_manager_secret_iam_member.github_token_access,
     google_secret_manager_secret_iam_member.webhook_url_access,
+    null_resource.build_image,
   ]
 
   lifecycle {
     ignore_changes = [
-      template[0].spec[0].containers[0].image,
+      # Only ignore image changes if NOT auto-building
+      # template[0].spec[0].containers[0].image,
       template[0].metadata[0].annotations["client.knative.dev/user-image"],
       template[0].metadata[0].annotations["run.googleapis.com/client-name"],
       template[0].metadata[0].annotations["run.googleapis.com/client-version"],

@@ -54,6 +54,11 @@ output "container_image" {
   value       = google_cloud_run_service.orchestrator.template[0].spec[0].containers[0].image
 }
 
+output "auto_build_enabled" {
+  description = "Whether automatic Docker build is enabled"
+  value       = var.auto_build
+}
+
 # ============================================================================
 # A2A Infrastructure Outputs
 # ============================================================================
@@ -142,13 +147,12 @@ locals {
        gcloud compute ssh orchestrator-postgres-vm --zone=${var.region}-a --command="PGPASSWORD='PASSWORD' psql -h localhost -U orchestrator -d orchestrator -f /tmp/postgres_schema.sql"
 
     📋 Next steps:
-    1. Build and deploy your container:
-       ./deploy-gcp-cloudbuild.sh
+    ✅ Application already built and deployed by Terraform!
 
-    2. Test the service:
+    1. Test the service:
        curl ${google_cloud_run_service.orchestrator.status[0].url}
 
-    3. View logs:
+    2. View logs:
        gcloud logging tail "resource.labels.service_name=${google_cloud_run_service.orchestrator.name}"
   EOT
 
@@ -162,22 +166,21 @@ locals {
     - Redis URL: redis://${try(google_redis_instance.task_queue[0].host, "N/A")}:${try(google_redis_instance.task_queue[0].port, "6379")}/0
 
     📋 Next steps:
-    1. Build and deploy your container:
-       ./deploy-gcp-cloudbuild.sh
+    ✅ Application already built and deployed by Terraform!
 
-    2. Test the service:
+    1. Test the service:
        curl ${google_cloud_run_service.orchestrator.status[0].url}
 
-    3. Test A2A AgentCard:
+    2. Test A2A AgentCard:
        curl ${google_cloud_run_service.orchestrator.status[0].url}/.well-known/agent.json
 
-    4. List A2A skills:
+    3. List A2A skills:
        curl ${google_cloud_run_service.orchestrator.status[0].url}/a2a/skills
 
-    5. Add this URL to your monitored repos as ORCHESTRATOR_URL:
+    4. Add this URL to your monitored repos as ORCHESTRATOR_URL:
        ${google_cloud_run_service.orchestrator.status[0].url}
 
-    6. View logs:
+    5. View logs:
        gcloud logging tail "resource.labels.service_name=${google_cloud_run_service.orchestrator.name}"
 
     💰 Estimated Monthly Cost:
