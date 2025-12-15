@@ -116,67 +116,75 @@ output "a2a_endpoints" {
 
 output "next_steps" {
   description = "Next steps after Terraform apply"
-  value = var.use_postgresql ? <<-EOT
-    ✅ A2A Infrastructure deployed successfully with PostgreSQL!
+  value       = var.use_postgresql ? <<-EOT
+✅ A2A Infrastructure deployed successfully with PostgreSQL!
 
-    🔧 A2A Resources Created:
-    - Backend: PostgreSQL (primary - recommended)
-    - PostgreSQL VM: orchestrator-postgres-vm (${var.postgres_vm_machine_type})
-    - VPC Connector: ${google_vpc_access_connector.backend_connector.name}
-    - Internal IP: ${var.postgres_host}
+🔧 A2A Resources Created:
+- Backend: PostgreSQL (primary - recommended)
+- PostgreSQL VM: orchestrator-postgres-vm (${var.postgres_vm_machine_type})
+- VPC Connector: ${google_vpc_access_connector.backend_connector.name}
+- Internal IP: ${var.postgres_host}
 
-    📝 PostgreSQL Connection:
-    POSTGRES_HOST=${var.postgres_host}
-    POSTGRES_PORT=5432
-    POSTGRES_DB=orchestrator
-    POSTGRES_USER=orchestrator
-    POSTGRES_PASSWORD=${var.postgres_password != "" ? "*****(set)" : random_password.postgres_password.result}
+📝 PostgreSQL Connection:
+POSTGRES_HOST=${var.postgres_host}
+POSTGRES_PORT=5432
+POSTGRES_DB=orchestrator
+POSTGRES_USER=orchestrator
+POSTGRES_PASSWORD=${var.postgres_password != "" ? "*****(set)" : random_password.postgres_password.result}
 
-    ⚠️  Initialize database schema:
-    1. Copy schema to VM:
-       gcloud compute scp orchestrator/a2a/postgres_schema.sql orchestrator-postgres-vm:/tmp/ --zone=${var.region}-a
+⚠️  Initialize database schema:
+1. Copy schema to VM:
+   gcloud compute scp orchestrator/a2a/postgres_schema.sql orchestrator-postgres-vm:/tmp/ --zone=${var.region}-a
 
-    2. Initialize schema:
-       gcloud compute ssh orchestrator-postgres-vm --zone=${var.region}-a --command="PGPASSWORD='${var.postgres_password != "" ? var.postgres_password : random_password.postgres_password.result}' psql -h localhost -U orchestrator -d orchestrator -f /tmp/postgres_schema.sql"
+2. Initialize schema:
+   gcloud compute ssh orchestrator-postgres-vm --zone=${var.region}-a --command="PGPASSWORD='${var.postgres_password != "" ? var.postgres_password : random_password.postgres_password.result}' psql -h localhost -U orchestrator -d orchestrator -f /tmp/postgres_schema.sql"
 
-    📋 Next steps:
-  EOT
+📋 Next steps:
+1. Build and deploy your container:
+   ./deploy-gcp-cloudbuild.sh
+
+2. Test the service:
+   curl ${google_cloud_run_service.orchestrator.status[0].url}
+
+3. View logs:
+   gcloud logging tail "resource.labels.service_name=${google_cloud_run_service.orchestrator.name}"
+EOT
   : <<-EOT
-    ✅ A2A Infrastructure deployed successfully with Redis!
+✅ A2A Infrastructure deployed successfully with Redis!
 
-    🔧 A2A Resources Created:
-    - Backend: Redis Memorystore (secondary fallback)
-    - Redis Instance: ${google_redis_instance.task_queue[0].name} (${var.redis_memory_gb}GB)
-    - VPC Connector: ${google_vpc_access_connector.backend_connector.name}
-    - Redis URL: redis://${google_redis_instance.task_queue[0].host}:${google_redis_instance.task_queue[0].port}/0
+🔧 A2A Resources Created:
+- Backend: Redis Memorystore (secondary fallback)
+- Redis Instance: ${google_redis_instance.task_queue[0].name} (${var.redis_memory_gb}GB)
+- VPC Connector: ${google_vpc_access_connector.backend_connector.name}
+- Redis URL: redis://${google_redis_instance.task_queue[0].host}:${google_redis_instance.task_queue[0].port}/0
 
-    📋 Next steps:
-    1. Build and deploy your container:
-       ./deploy-gcp-cloudbuild.sh
+📋 Next steps:
+1. Build and deploy your container:
+   ./deploy-gcp-cloudbuild.sh
 
-    2. Test the service:
-       curl ${google_cloud_run_service.orchestrator.status[0].url}
+2. Test the service:
+   curl ${google_cloud_run_service.orchestrator.status[0].url}
 
-    3. Test A2A AgentCard:
-       curl ${google_cloud_run_service.orchestrator.status[0].url}/.well-known/agent.json
+3. Test A2A AgentCard:
+   curl ${google_cloud_run_service.orchestrator.status[0].url}/.well-known/agent.json
 
-    4. List A2A skills:
-       curl ${google_cloud_run_service.orchestrator.status[0].url}/a2a/skills
+4. List A2A skills:
+   curl ${google_cloud_run_service.orchestrator.status[0].url}/a2a/skills
 
-    5. Add this URL to your monitored repos as ORCHESTRATOR_URL:
-       ${google_cloud_run_service.orchestrator.status[0].url}
+5. Add this URL to your monitored repos as ORCHESTRATOR_URL:
+   ${google_cloud_run_service.orchestrator.status[0].url}
 
-    6. View logs:
-       gcloud logging tail "resource.labels.service_name=${google_cloud_run_service.orchestrator.name}"
+6. View logs:
+   gcloud logging tail "resource.labels.service_name=${google_cloud_run_service.orchestrator.name}"
 
-    💰 Estimated Monthly Cost:
-    - Cloud Run: ~$50/month
-    - ${var.use_postgresql ? "PostgreSQL VM: ~$5-10/month (e2-micro + 30GB disk, free tier eligible)" : "Redis Memorystore: ~$45/month"}
-    - Total: ~${var.use_postgresql ? "$55-60/month" : "$95/month"}
+💰 Estimated Monthly Cost:
+- Cloud Run: ~$50/month
+- Redis Memorystore: ~$45/month
+- Total: ~$95/month
 
-    📚 Documentation:
-    - A2A Features: docs/A2A_README.md
-    - Migration Guide: docs/A2A_MIGRATION_GUIDE.md
-    - PostgreSQL Setup: docs/POSTGRESQL_SETUP.md
-  EOT
+📚 Documentation:
+- A2A Features: docs/A2A_README.md
+- Migration Guide: docs/A2A_MIGRATION_GUIDE.md
+- PostgreSQL Setup: docs/POSTGRESQL_SETUP.md
+EOT
 }
