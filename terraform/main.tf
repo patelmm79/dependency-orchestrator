@@ -358,11 +358,13 @@ resource "null_resource" "build_image" {
   provisioner "local-exec" {
     command = <<-EOT
       echo "Building Docker image with Cloud Build..."
+      cd ${path.module}/..
+      COMMIT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "latest")
       gcloud builds submit \
-        --config=${path.module}/../cloudbuild.yaml \
-        --substitutions=_REGION=${var.region} \
+        --config=cloudbuild.yaml \
+        --substitutions=_REGION=${var.region},COMMIT_SHA=$COMMIT_SHA \
         --project=${var.project_id} \
-        ${path.module}/..
+        .
     EOT
   }
 
