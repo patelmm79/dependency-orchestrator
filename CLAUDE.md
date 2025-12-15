@@ -6,6 +6,103 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 The Dependency Orchestrator is an AI-powered service that coordinates automated triage agents to assess the impact of changes across related repositories. When changes occur in one repository, it spawns specialized AI agents to analyze impact on dependent repositories and automatically creates GitHub issues with recommendations.
 
+**Version 2.0** introduces full A2A (Agent-to-Agent) protocol support, enabling seamless interoperability with other AI agents in the ecosystem. The service now operates as both a webhook receiver (legacy mode) and an A2A-compliant agent.
+
+## A2A Protocol Support
+
+### What is A2A?
+
+The Agent-to-Agent (A2A) protocol is an open standard for AI agent communication and collaboration. Dependency Orchestrator now exposes its capabilities through standardized A2A endpoints, allowing other agents (like dev-nexus) to discover and invoke orchestration skills programmatically.
+
+### Key Features
+
+- **AgentCard Discovery**: Publish capabilities at `/.well-known/agent.json` for automatic discovery
+- **7 A2A Skills**: Standardized skills for dependency orchestration (events, queries, actions)
+- **Async Task Processing**: Redis-backed task queue for long-running impact analyses
+- **Bidirectional Communication**: Can both receive A2A requests and call other A2A agents
+- **Backward Compatible**: Legacy webhook endpoints remain fully functional
+
+### A2A Skills Available
+
+The orchestrator exposes 7 skills across 4 categories:
+
+**Events (fire-and-forget notifications)**
+- `receive_change_notification` - Primary entry point for change events
+
+**Queries (synchronous data retrieval)**
+- `get_impact_analysis` - Analyze impact of specific changes on a target repo
+- `get_dependencies` - Retrieve dependency graph for a repository
+- `get_orchestration_status` - Poll status of async tasks
+
+**Actions (mutating operations)**
+- `trigger_consumer_triage` - Manually trigger consumer impact analysis
+- `trigger_template_triage` - Manually trigger template sync analysis
+- `add_dependency_relationship` - Add/update relationship configuration
+
+### Architecture Changes in v2.0
+
+**Multi-Process Design**:
+- Web process: FastAPI server handling HTTP requests (A2A + legacy)
+- Worker processes: PostgreSQL/RQ workers processing async triage tasks
+- Backend: PostgreSQL (primary) or Redis (secondary) for task queue
+- Supervisor: Process manager orchestrating web + workers
+
+**Deployment Stack**:
+- Cloud Run: Single service running both web and workers via Supervisor
+- **PostgreSQL VM**: Primary backend (e2-micro, ~$5-10/month, free tier eligible) **[RECOMMENDED]**
+- **Redis Memorystore**: Secondary backend option (1GB, ~$45/month)
+- VPC Connector: Allows Cloud Run to access PostgreSQL/Redis in VPC
+
+**Backend Comparison**:
+| Feature | PostgreSQL (Primary) | Redis (Secondary) |
+|---------|---------------------|-------------------|
+| **Cost** | ~$5-10/month | ~$45/month |
+| **Free Tier** | ✅ e2-micro eligible | ❌ No free tier |
+| **Persistence** | Full ACID database | In-memory + snapshots |
+| **Querying** | SQL-based analytics | Limited |
+| **Audit Trail** | Built-in task history | Manual implementation |
+| **Setup** | VM-based | Managed service |
+| **Recommended** | ✅ Yes | For high-throughput only |
+
+### Using A2A Endpoints
+
+```bash
+# Discover agent capabilities
+curl https://orchestrator-url/.well-known/agent.json
+
+# List available skills
+curl https://orchestrator-url/a2a/skills
+
+# Execute a skill (query dependencies)
+curl -X POST https://orchestrator-url/a2a/execute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "skill_name": "get_dependencies",
+    "input_data": {"repo": "owner/repo"}
+  }'
+
+# Trigger async consumer triage
+curl -X POST https://orchestrator-url/a2a/execute \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key" \
+  -d '{
+    "skill_name": "trigger_consumer_triage",
+    "input_data": {
+      "source_repo": "owner/source",
+      "consumer_repo": "owner/consumer",
+      "change_event": {...}
+    }
+  }'
+
+# Poll task status
+curl -X POST https://orchestrator-url/a2a/execute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "skill_name": "get_orchestration_status",
+    "input_data": {"task_id": "abc-123"}
+  }'
+```
+
 ## Development Commands
 
 ### Setup
@@ -20,34 +117,94 @@ export GITHUB_TOKEN="ghp_xxxxx"
 # Optional environment variables
 export WEBHOOK_URL="https://discord.com/api/webhooks/xxxxx"  # Discord/Slack notifications
 export DEV_NEXUS_URL="https://dev-nexus-xxxxx-uc.a.run.app"  # Dev-nexus integration
+
+# Backend Selection (PostgreSQL is default/recommended)
+export USE_POSTGRESQL="true"  # Use PostgreSQL (primary backend)
+
+# PostgreSQL connection (if USE_POSTGRESQL=true)
+export POSTGRES_HOST="localhost"  # or VM IP: 10.8.0.2
+export POSTGRES_PORT="5432"
+export POSTGRES_DB="orchestrator"
+export POSTGRES_USER="orchestrator"
+export POSTGRES_PASSWORD="your-password"
+
+# OR use Redis (secondary backend, if USE_POSTGRESQL=false)
+export USE_POSTGRESQL="false"
+export REDIS_URL="redis://localhost:6379/0"
+
+# Start local PostgreSQL (recommended)
+docker run -d -p 5432:5432 \
+  -e POSTGRES_DB=orchestrator \
+  -e POSTGRES_USER=orchestrator \
+  -e POSTGRES_PASSWORD=your-password \
+  postgres:15-alpine
+
+# Initialize schema
+psql -h localhost -U orchestrator -d orchestrator -f orchestrator/a2a/postgres_schema.sql
+
+# OR start local Redis (fallback option)
+docker run -d -p 6379:6379 redis:7-alpine
 ```
 
 ### Running Locally
 ```bash
-# Option 1: Direct Python
-python orchestrator/app.py
+# Option 1: Web server only (for development/testing)
+# Legacy endpoints work, but A2A async features will fail without Redis
+uvicorn orchestrator.app_unified:app --reload --port 8080
 
-# Option 2: With uvicorn (recommended for development)
-uvicorn orchestrator.app:app --reload --port 8080
+# Option 2: Full multi-process setup (web + workers)
+# Start Redis first, then run supervisor
+supervisord -c supervisord.conf
+
+# Option 3: Manual web + worker processes (for debugging)
+# Terminal 1 - Web server
+uvicorn orchestrator.app_unified:app --reload --port 8080
+
+# Terminal 2 - RQ worker
+rq worker --url redis://localhost:6379/0
+
+# Terminal 3 - Monitor task queue
+rq info --url redis://localhost:6379/0
 ```
 
 ### Testing
 ```bash
-# Health check
+# Health check (shows A2A status)
 curl http://localhost:8080/
 
-# View configured relationships
+# A2A AgentCard discovery
+curl http://localhost:8080/.well-known/agent.json
+
+# List A2A skills
+curl http://localhost:8080/a2a/skills
+
+# A2A health check
+curl http://localhost:8080/a2a/health
+
+# Legacy: View configured relationships
 curl http://localhost:8080/api/relationships
 
-# Test consumer triage agent
+# Legacy: Test consumer triage agent (synchronous)
 curl -X POST http://localhost:8080/api/test/consumer-triage \
   -H "Content-Type: application/json" \
   -d @test/consumer_test.json
 
-# Test template triage agent
+# Legacy: Test template triage agent (synchronous)
 curl -X POST http://localhost:8080/api/test/template-triage \
   -H "Content-Type: application/json" \
   -d @test/template_test.json
+
+# A2A: Trigger async consumer triage
+curl -X POST http://localhost:8080/a2a/execute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "skill_name": "trigger_consumer_triage",
+    "input_data": {
+      "source_repo": "owner/source",
+      "consumer_repo": "owner/consumer",
+      "change_event": {...}
+    }
+  }'
 ```
 
 ### Setting Up Source Repositories
@@ -64,11 +221,23 @@ This separate guide includes:
 
 ### Deployment
 
-**Two-Step Process:**
+**A2A-Enhanced Deployment (v2.0)**
+
+The A2A-enabled version requires additional infrastructure for async task processing:
+
+**Three-Step Process:**
 1. **Infrastructure Setup** (one-time): Secrets, IAM, Cloud Run service skeleton
-2. **Application Deployment** (ongoing): Build and deploy your code
+2. **Redis Memorystore Setup** (one-time): Task queue for A2A async operations
+3. **Application Deployment** (ongoing): Build and deploy your code
 
 You can use Terraform for step 1, or let the deployment scripts handle both steps.
+
+**Key Changes in v2.0:**
+- Multi-process deployment (web + workers via Supervisor)
+- Redis Memorystore required for async A2A features
+- VPC Connector needed for Cloud Run → Redis connectivity
+- Increased resource allocation (1GB RAM, 2 CPU cores)
+- Estimated cost: ~$95/month (Cloud Run ~$50 + Redis ~$45)
 
 ---
 
@@ -116,23 +285,41 @@ terraform plan
 terraform apply
 ```
 
-**After Terraform completes, deploy application code (choose one):**
+**After Terraform completes, set up Redis and deploy application:**
+
+Step 1: Setup Redis Memorystore (required for A2A async features)
+```bash
+cd ..
+./setup-redis-memorystore.sh
+```
+
+This will:
+- Create Redis Memorystore instance (1GB, ~$45/month)
+- Create VPC connector for Cloud Run → Redis connectivity
+- Output Redis connection details
+
+Step 2: Update cloudbuild.yaml with Redis URL
+```bash
+# Copy the Redis URL from the setup script output
+# Edit cloudbuild.yaml and update the _REDIS_URL substitution variable
+# Example: _REDIS_URL: 'redis://10.123.45.67:6379/0'
+```
+
+Step 3: Deploy application code (choose one)
 
 Option A: Cloud Build (no Docker needed)
 ```bash
-cd ..
 ./deploy-gcp-cloudbuild.sh
 ```
 
 Option B: Local Docker (faster iteration)
 ```bash
-cd ..
 export GCP_PROJECT_ID="your-project-id"
 ./deploy-gcp.sh
 ```
 
 **Pros:** Infrastructure as code, reproducible, team collaboration, manages IAM properly
-**Cons:** Learning curve, two-step process (infra then app)
+**Cons:** Learning curve, three-step process (infra → redis → app)
 
 ---
 

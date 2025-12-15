@@ -24,13 +24,16 @@ provider "google" {
   region  = var.region
 }
 
-# Enable required APIs
+# Enable required APIs (including A2A requirements)
 resource "google_project_service" "required_apis" {
   for_each = toset([
     "cloudbuild.googleapis.com",
     "run.googleapis.com",
     "secretmanager.googleapis.com",
     "cloudresourcemanager.googleapis.com",
+    "redis.googleapis.com",           # A2A: Redis Memorystore
+    "vpcaccess.googleapis.com",       # A2A: VPC connector
+    "compute.googleapis.com",          # A2A: Compute Engine for VPC
   ])
 
   service            = each.value
@@ -156,6 +159,119 @@ resource "google_secret_manager_secret_iam_member" "orchestrator_api_key_access"
   member    = "serviceAccount:${data.google_project.project.number}-compute@developer.gserviceaccount.com"
 }
 
+# ============================================================================
+# A2A Infrastructure: PostgreSQL (Primary) or Redis (Secondary)
+# ============================================================================
+
+# VPC Connector for Cloud Run to access PostgreSQL/Redis
+resource "google_vpc_access_connector" "backend_connector" {
+  name          = var.vpc_connector_name
+  region        = var.region
+  network       = var.vpc_network
+  ip_cidr_range = var.vpc_connector_cidr
+
+  min_instances = 2
+  max_instances = 3
+
+  depends_on = [google_project_service.required_apis]
+}
+
+# Generate PostgreSQL password if not provided
+resource "random_password" "postgres_password" {
+  length  = 32
+  special = false
+}
+
+# Secret for PostgreSQL password
+resource "google_secret_manager_secret" "postgres_password" {
+  count     = var.use_postgresql ? 1 : 0
+  secret_id = "postgres-password"
+  labels    = merge(var.labels, { secret-type = "database-password" })
+
+  replication {
+    auto {}
+  }
+
+  depends_on = [google_project_service.required_apis]
+}
+
+resource "google_secret_manager_secret_version" "postgres_password" {
+  count       = var.use_postgresql ? 1 : 0
+  secret      = google_secret_manager_secret.postgres_password[0].id
+  secret_data = var.postgres_password != "" ? var.postgres_password : random_password.postgres_password.result
+
+  lifecycle {
+    ignore_changes = [secret_data]
+  }
+}
+
+# Grant Cloud Run access to PostgreSQL password secret
+resource "google_secret_manager_secret_iam_member" "postgres_password_access" {
+  count     = var.use_postgresql ? 1 : 0
+  secret_id = google_secret_manager_secret.postgres_password[0].secret_id
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${data.google_project.project.number}-compute@developer.gserviceaccount.com"
+}
+
+# PostgreSQL VM (Primary backend - recommended)
+resource "google_compute_instance" "postgres" {
+  count        = var.use_postgresql ? 1 : 0
+  name         = "orchestrator-postgres-vm"
+  machine_type = var.postgres_vm_machine_type
+  zone         = "${var.region}-a"
+
+  tags = ["postgresql", "orchestrator"]
+
+  boot_disk {
+    initialize_params {
+      image = "debian-cloud/debian-11"
+      size  = var.postgres_disk_size_gb
+      type  = "pd-standard"
+    }
+  }
+
+  network_interface {
+    network    = var.vpc_network
+    network_ip = var.postgres_host
+
+    # No external IP (internal only)
+    access_config {}
+  }
+
+  metadata_startup_script = templatefile("${path.module}/postgres-startup.sh.tpl", {
+    db_name     = "orchestrator"
+    db_user     = "orchestrator"
+    db_password = var.postgres_password != "" ? var.postgres_password : random_password.postgres_password.result
+  })
+
+  labels = merge(var.labels, {
+    component = "database"
+    backend   = "postgresql"
+  })
+
+  depends_on = [google_project_service.required_apis]
+}
+
+# Redis Memorystore instance (Secondary backend - fallback)
+resource "google_redis_instance" "task_queue" {
+  count          = var.use_postgresql ? 0 : 1
+  name           = var.redis_instance_name
+  tier           = var.redis_tier
+  memory_size_gb = var.redis_memory_gb
+  region         = var.region
+
+  redis_version      = "REDIS_7_0"
+  display_name       = "Dependency Orchestrator Task Queue"
+  authorized_network = "projects/${var.project_id}/global/networks/${var.vpc_network}"
+
+  labels = merge(var.labels, {
+    component = "task-queue"
+    backend   = "redis"
+  })
+
+  depends_on = [google_project_service.required_apis]
+}
+
 # Cloud Run service
 resource "google_cloud_run_service" "orchestrator" {
   name     = var.service_name
@@ -169,8 +285,10 @@ resource "google_cloud_run_service" "orchestrator" {
     metadata {
       labels = var.labels
       annotations = {
-        "autoscaling.knative.dev/maxScale" = var.max_instances
-        "autoscaling.knative.dev/minScale" = var.min_instances
+        "autoscaling.knative.dev/maxScale"        = var.max_instances
+        "autoscaling.knative.dev/minScale"        = var.min_instances
+        "run.googleapis.com/vpc-access-connector" = google_vpc_access_connector.backend_connector.id
+        "run.googleapis.com/vpc-access-egress"    = "private-ranges-only"
       }
     }
 
@@ -230,6 +348,72 @@ resource "google_cloud_run_service" "orchestrator" {
         env {
           name  = "REQUIRE_AUTH"
           value = var.require_authentication ? "true" : "false"
+        }
+
+        # Backend selection
+        env {
+          name  = "USE_POSTGRESQL"
+          value = var.use_postgresql ? "true" : "false"
+        }
+
+        # PostgreSQL connection (primary backend)
+        dynamic "env" {
+          for_each = var.use_postgresql ? [1] : []
+          content {
+            name  = "POSTGRES_HOST"
+            value = var.postgres_host
+          }
+        }
+
+        dynamic "env" {
+          for_each = var.use_postgresql ? [1] : []
+          content {
+            name  = "POSTGRES_PORT"
+            value = "5432"
+          }
+        }
+
+        dynamic "env" {
+          for_each = var.use_postgresql ? [1] : []
+          content {
+            name  = "POSTGRES_DB"
+            value = "orchestrator"
+          }
+        }
+
+        dynamic "env" {
+          for_each = var.use_postgresql ? [1] : []
+          content {
+            name  = "POSTGRES_USER"
+            value = "orchestrator"
+          }
+        }
+
+        dynamic "env" {
+          for_each = var.use_postgresql ? [1] : []
+          content {
+            name = "POSTGRES_PASSWORD"
+            value_from {
+              secret_key_ref {
+                name = google_secret_manager_secret.postgres_password[0].secret_id
+                key  = "latest"
+              }
+            }
+          }
+        }
+
+        # Redis connection (secondary backend)
+        dynamic "env" {
+          for_each = var.use_postgresql ? [] : [1]
+          content {
+            name  = "REDIS_URL"
+            value = "redis://${google_redis_instance.task_queue[0].host}:${google_redis_instance.task_queue[0].port}/0"
+          }
+        }
+
+        env {
+          name  = "DEV_NEXUS_URL"
+          value = var.dev_nexus_url
         }
       }
 

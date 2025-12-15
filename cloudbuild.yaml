@@ -38,9 +38,9 @@ steps:
       - 'managed'
       - '--allow-unauthenticated'
       - '--memory'
-      - '512Mi'
+      - '1Gi'
       - '--cpu'
-      - '1'
+      - '2'
       - '--timeout'
       - '300'
       - '--max-instances'
@@ -51,12 +51,17 @@ steps:
       - 'GITHUB_TOKEN=github-token:latest'
       - '--update-secrets'
       - 'WEBHOOK_URL=webhook-url:latest'
+      - '--vpc-connector'
+      - 'orchestrator-redis-connector'
+      - '--set-env-vars'
+      - 'REDIS_URL=${_REDIS_URL}'
       - '--labels'
-      - 'application=dependency-orchestrator,environment=production,managed-by=cloud-build,component=orchestration'
+      - 'application=dependency-orchestrator,environment=production,managed-by=cloud-build,component=orchestration,a2a-enabled=true'
 
 # Substitution variables with defaults
 substitutions:
   _REGION: 'us-central1'
+  _REDIS_URL: 'redis://10.0.0.3:6379/0'  # Update with actual Redis host after setup-redis-memorystore.sh
 
 # Images to be pushed to Container Registry
 images:

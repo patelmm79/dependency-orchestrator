@@ -54,15 +54,15 @@ variable "require_authentication" {
 }
 
 variable "memory" {
-  description = "Memory limit for Cloud Run service"
+  description = "Memory limit for Cloud Run service (A2A requires 1Gi for multi-process)"
   type        = string
-  default     = "512Mi"
+  default     = "1Gi"
 }
 
 variable "cpu" {
-  description = "CPU allocation for Cloud Run service"
+  description = "CPU allocation for Cloud Run service (A2A requires 2 CPUs for web + workers)"
   type        = string
-  default     = "1"
+  default     = "2"
 }
 
 variable "timeout_seconds" {
@@ -130,4 +130,81 @@ variable "labels" {
     managed-by  = "terraform"
     component   = "orchestration"
   }
+}
+
+# ============================================================================
+# A2A Infrastructure Variables
+# ============================================================================
+
+variable "use_postgresql" {
+  description = "Use PostgreSQL as primary backend (recommended). If false, uses Redis."
+  type        = bool
+  default     = true
+}
+
+variable "postgres_password" {
+  description = "PostgreSQL password for orchestrator user (leave empty to auto-generate)"
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
+variable "postgres_host" {
+  description = "PostgreSQL host internal IP (only needed if using external PostgreSQL)"
+  type        = string
+  default     = "10.8.0.2"
+}
+
+variable "postgres_vm_machine_type" {
+  description = "Machine type for PostgreSQL VM (e2-micro is free tier eligible)"
+  type        = string
+  default     = "e2-micro"
+}
+
+variable "postgres_disk_size_gb" {
+  description = "PostgreSQL VM disk size in GB"
+  type        = number
+  default     = 30
+}
+
+variable "vpc_network" {
+  description = "VPC network name for PostgreSQL/Redis and VPC connector"
+  type        = string
+  default     = "default"
+}
+
+variable "vpc_connector_name" {
+  description = "Name of the VPC connector for Cloud Run to Redis"
+  type        = string
+  default     = "orchestrator-redis-connector"
+}
+
+variable "vpc_connector_cidr" {
+  description = "CIDR range for VPC connector (must be /28 and not overlap with existing ranges)"
+  type        = string
+  default     = "10.8.0.0/28"
+}
+
+variable "redis_instance_name" {
+  description = "Name of the Redis Memorystore instance"
+  type        = string
+  default     = "orchestrator-task-queue"
+}
+
+variable "redis_tier" {
+  description = "Redis tier (BASIC or STANDARD_HA)"
+  type        = string
+  default     = "BASIC"
+}
+
+variable "redis_memory_gb" {
+  description = "Redis memory size in GB"
+  type        = number
+  default     = 1
+}
+
+variable "dev_nexus_url" {
+  description = "URL of dev-nexus A2A agent for integration (optional)"
+  type        = string
+  default     = ""
 }

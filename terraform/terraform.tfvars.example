@@ -1,40 +1,77 @@
 # Copy this file to terraform.tfvars and fill in your values
 # DO NOT commit terraform.tfvars to git (it contains secrets)
 
-# Required variables
+# ============================================================================
+# Required Variables
+# ============================================================================
 project_id        = "your-gcp-project-id"
 anthropic_api_key = "sk-ant-xxxxx"
 github_token      = "ghp_xxxxx"
 
-# Optional variables (defaults are shown)
+# ============================================================================
+# Optional Variables (defaults are shown)
+# ============================================================================
 region       = "us-central1"
 service_name = "architecture-kb-orchestrator"
 
+# ============================================================================
+# Webhook & API Key Configuration
+# ============================================================================
 # Webhook URL for notifications (optional)
 # Leave as empty string "" if you don't want webhook notifications
-# If provided, must be a valid webhook URL
-webhook_url  = "" # Discord/Slack webhook URL - leave empty if not needed
+webhook_url  = "" # Discord/Slack webhook URL
 
 # API Key for authentication (optional)
 # Leave empty to auto-generate a random 32-character key
 # Terraform will output the generated key after apply
-orchestrator_api_key = "" # Leave empty to auto-generate
+orchestrator_api_key = ""
 
 # Authentication settings
 require_authentication = false  # Set to true to require API key for all requests
 
-# Resource configuration
-memory                = "512Mi"
-cpu                   = "1"
+# ============================================================================
+# Resource Configuration (A2A Optimized)
+# ============================================================================
+# A2A v2.0 requires increased resources for multi-process architecture
+memory                = "1Gi"   # Increased from 512Mi for web + workers
+cpu                   = "2"     # Increased from 1 for parallel processing
 timeout_seconds       = 300
 max_instances         = "10"
 min_instances         = "0"
 container_concurrency = 80
 
-# Access control
+# ============================================================================
+# Access Control
+# ============================================================================
 allow_unauthenticated = true
 
-# Cloud Build trigger (optional - enables automatic deployments on git push)
+# ============================================================================
+# A2A Infrastructure Backend Selection
+# ============================================================================
+# PostgreSQL (primary - recommended, ~$5-10/month, free tier eligible)
+use_postgresql       = true           # Set to false to use Redis instead
+
+# PostgreSQL Configuration (if use_postgresql = true)
+postgres_password    = ""             # Leave empty to auto-generate
+postgres_host        = "10.8.0.2"     # Internal IP for PostgreSQL VM
+postgres_vm_machine_type = "e2-micro" # Free tier eligible
+postgres_disk_size_gb    = 30         # Storage size
+
+# Redis Configuration (if use_postgresql = false)
+vpc_network          = "default"
+vpc_connector_name   = "orchestrator-backend-connector"
+vpc_connector_cidr   = "10.8.0.0/28"  # Ensure no overlap with existing VPC ranges
+
+redis_instance_name  = "orchestrator-task-queue"
+redis_tier           = "BASIC"        # Options: BASIC (~$45/mo) or STANDARD_HA (~$200/mo)
+redis_memory_gb      = 1              # Minimum 1GB for task queue
+
+# Dev-nexus A2A integration (optional)
+dev_nexus_url        = ""             # e.g., "https://dev-nexus-xxxxx-uc.a.run.app"
+
+# ============================================================================
+# Cloud Build Trigger (optional - enables automatic deployments on git push)
+# ============================================================================
 enable_cloud_build_trigger = false
 github_repo_owner          = "your-github-username"
 github_repo_name           = "dependency-orchestrator"

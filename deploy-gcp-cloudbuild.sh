@@ -79,6 +79,9 @@ echo "🔧 Ensuring required APIs are enabled..."
 gcloud services enable cloudbuild.googleapis.com --project=$PROJECT_ID
 gcloud services enable run.googleapis.com --project=$PROJECT_ID
 gcloud services enable secretmanager.googleapis.com --project=$PROJECT_ID
+gcloud services enable redis.googleapis.com --project=$PROJECT_ID
+gcloud services enable vpcaccess.googleapis.com --project=$PROJECT_ID
+gcloud services enable compute.googleapis.com --project=$PROJECT_ID
 
 # Grant Cloud Run access to secrets
 echo "🔑 Granting Cloud Run service account access to secrets..."
@@ -110,11 +113,19 @@ echo ""
 echo "✅ Deployment complete!"
 echo "🌐 Service URL: $SERVICE_URL"
 echo ""
+echo "⚠️  IMPORTANT: A2A async features require Redis Memorystore"
+echo ""
+echo "To set up Redis for async task processing:"
+echo "  ./setup-redis-memorystore.sh"
+echo ""
+echo "After Redis is set up, redeploy the service with REDIS_URL:"
+echo "  Update cloudbuild.yaml to include Redis connection details"
+echo ""
 echo "Next steps:"
 echo "1. Test the service: curl $SERVICE_URL"
-echo "2. Add ORCHESTRATOR_URL secret to your monitored repos:"
-echo "   Value: $SERVICE_URL"
-echo "3. Make a commit to vllm-container-ngc to trigger the flow!"
+echo "2. Test A2A agent card: curl $SERVICE_URL/.well-known/agent.json"
+echo "3. Add ORCHESTRATOR_URL secret to your monitored repos: $SERVICE_URL"
+echo "4. Make a commit to trigger the flow!"
 echo ""
 echo "To view build logs:"
 echo "  gcloud builds list --limit=5 --project=$PROJECT_ID"
