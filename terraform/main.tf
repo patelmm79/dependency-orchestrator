@@ -349,7 +349,7 @@ resource "null_resource" "build_image" {
 
   triggers = {
     # Rebuild when this file changes (add more source files if needed)
-    build_script = filemd5("${path.module}/../cloudbuild.yaml")
+    build_script = filemd5("${path.module}/../cloudbuild-terraform.yaml")
     dockerfile   = filemd5("${path.module}/../Dockerfile")
     # Force rebuild on each apply - remove if you want to build only on code changes
     always_run = timestamp()
@@ -361,7 +361,7 @@ resource "null_resource" "build_image" {
       cd ${path.module}/..
       COMMIT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "latest")
       gcloud builds submit \
-        --config=cloudbuild.yaml \
+        --config=cloudbuild-terraform.yaml \
         --substitutions=_REGION=${var.region},COMMIT_SHA=$COMMIT_SHA \
         --project=${var.project_id} \
         .
