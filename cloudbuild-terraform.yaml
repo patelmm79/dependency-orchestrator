@@ -26,7 +26,6 @@ steps:
 
 # Substitution variables with defaults
 substitutions:
-  _REGION: 'us-central1'
   _COMMIT_SHA: 'latest'
 
 # Images to be pushed to Container Registry

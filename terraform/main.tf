@@ -362,7 +362,7 @@ resource "null_resource" "build_image" {
       COMMIT_SHA=$(git rev-parse --short HEAD 2>/dev/null || echo "latest")
       gcloud builds submit \
         --config=cloudbuild-terraform.yaml \
-        --substitutions=_REGION=${var.region},_COMMIT_SHA=$COMMIT_SHA \
+        --substitutions=_COMMIT_SHA=$COMMIT_SHA \
         --project=${var.project_id} \
         .
     EOT
