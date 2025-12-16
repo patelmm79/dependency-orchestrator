@@ -150,6 +150,12 @@ async def root():
     }
 
 
+@app.get("/health")
+async def health():
+    """Simple health check endpoint for Cloud Run (public, no auth required)"""
+    return {"status": "healthy"}
+
+
 @app.get("/api/relationships", dependencies=[Depends(verify_api_key)])
 async def get_relationships():
     """Get all configured relationships"""
