@@ -56,14 +56,13 @@ steps:
       - '--vpc-connector'
       - 'orch-backend-conn'
       - '--set-env-vars'
-      - 'USE_POSTGRESQL=true,POSTGRES_HOST=${_POSTGRES_HOST},POSTGRES_PORT=5432,POSTGRES_DB=orchestrator,POSTGRES_USER=orchestrator'
+      - 'USE_POSTGRESQL=true,POSTGRES_HOST=10.128.0.42,POSTGRES_PORT=5432,POSTGRES_DB=orchestrator,POSTGRES_USER=orchestrator'
       - '--labels'
       - 'application=dependency-orchestrator,environment=production,managed-by=cloud-build,component=orchestration,a2a-enabled=true'
 
 # Substitution variables with defaults
 substitutions:
   _REGION: 'us-central1'
-  _POSTGRES_HOST: '10.128.0.42'  # PostgreSQL VM internal IP
 
 # Images to be pushed to Container Registry
 images:
