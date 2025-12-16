@@ -101,7 +101,7 @@ output "redis_url" {
 
 output "vpc_connector" {
   description = "VPC connector for Cloud Run to PostgreSQL/Redis"
-  value       = google_vpc_access_connector.backend_connector.id
+  value       = local.vpc_connector_id
 }
 
 output "agent_card_url" {
@@ -120,13 +120,15 @@ output "a2a_endpoints" {
 }
 
 locals {
+  vpc_connector_name = var.create_vpc_connector ? google_vpc_access_connector.backend_connector[0].name : data.google_vpc_access_connector.backend_connector[0].name
+
   next_steps_postgres = <<-EOT
     ✅ A2A Infrastructure deployed successfully with PostgreSQL!
 
     🔧 A2A Resources Created:
     - Backend: PostgreSQL (primary - recommended)
-    - PostgreSQL VM: orchestrator-postgres-vm (${var.postgres_vm_machine_type})
-    - VPC Connector: ${google_vpc_access_connector.backend_connector.name}
+    - PostgreSQL VM: ${var.create_postgres_vm ? "orchestrator-postgres-vm (${var.postgres_vm_machine_type})" : "orchestrator-postgres-vm (existing)"}
+    - VPC Connector: ${local.vpc_connector_name}
     - Internal IP: ${var.postgres_host}
 
     📝 PostgreSQL Connection:
@@ -162,7 +164,7 @@ locals {
     🔧 A2A Resources Created:
     - Backend: Redis Memorystore (secondary fallback)
     - Redis Instance: ${try(google_redis_instance.task_queue[0].name, "N/A")} (${var.redis_memory_gb}GB)
-    - VPC Connector: ${google_vpc_access_connector.backend_connector.name}
+    - VPC Connector: ${local.vpc_connector_name}
     - Redis URL: redis://${try(google_redis_instance.task_queue[0].host, "N/A")}:${try(google_redis_instance.task_queue[0].port, "6379")}/0
 
     📋 Next steps:
