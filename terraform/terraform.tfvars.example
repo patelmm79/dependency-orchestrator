@@ -68,7 +68,7 @@ create_postgres_vm   = false          # Set to true to create new VM, false to u
 
 # PostgreSQL Configuration (if use_postgresql = true)
 postgres_password    = ""             # Leave empty to auto-generate
-postgres_host        = "10.128.0.42"  # Internal IP for PostgreSQL VM (existing VM)
+postgres_host        = "10.128.0.42"  # Internal IP for PostgreSQL VM (must be in subnet range 10.128.0.0/20)
 postgres_vm_machine_type = "e2-micro" # Free tier eligible
 postgres_disk_size_gb    = 30         # Storage size
 
