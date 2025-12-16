@@ -154,6 +154,12 @@ variable "use_postgresql" {
   default     = true
 }
 
+variable "create_postgres_vm" {
+  description = "Create PostgreSQL VM (set to false if VM already exists)"
+  type        = bool
+  default     = false
+}
+
 variable "postgres_password" {
   description = "PostgreSQL password for orchestrator user (leave empty to auto-generate)"
   type        = string
@@ -164,7 +170,7 @@ variable "postgres_password" {
 variable "postgres_host" {
   description = "PostgreSQL host internal IP (only needed if using external PostgreSQL)"
   type        = string
-  default     = "10.8.0.2"
+  default     = "10.128.0.42"
 }
 
 variable "postgres_vm_machine_type" {
@@ -183,6 +189,12 @@ variable "vpc_network" {
   description = "VPC network name for PostgreSQL/Redis and VPC connector"
   type        = string
   default     = "default"
+}
+
+variable "create_vpc_connector" {
+  description = "Create VPC connector (set to false if connector already exists)"
+  type        = bool
+  default     = false
 }
 
 variable "vpc_connector_name" {

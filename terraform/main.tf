@@ -216,8 +216,14 @@ resource "google_secret_manager_secret_iam_member" "orchestrator_api_key_access"
 # A2A Infrastructure: PostgreSQL (Primary) or Redis (Secondary)
 # ============================================================================
 
+# Local variable to get VPC connector ID (either created or existing)
+locals {
+  vpc_connector_id = var.create_vpc_connector ? google_vpc_access_connector.backend_connector[0].id : data.google_vpc_access_connector.backend_connector[0].id
+}
+
 # VPC Connector for Cloud Run to access PostgreSQL/Redis
 resource "google_vpc_access_connector" "backend_connector" {
+  count         = var.create_vpc_connector ? 1 : 0
   name          = var.vpc_connector_name
   region        = var.region
   network       = var.vpc_network
@@ -227,6 +233,13 @@ resource "google_vpc_access_connector" "backend_connector" {
   max_instances = 3
 
   depends_on = [google_project_service.required_apis]
+}
+
+# Data source for existing VPC connector (when not creating)
+data "google_vpc_access_connector" "backend_connector" {
+  count  = var.create_vpc_connector ? 0 : 1
+  name   = var.vpc_connector_name
+  region = var.region
 }
 
 # Generate PostgreSQL password if not provided
@@ -282,7 +295,7 @@ resource "google_secret_manager_secret_iam_member" "postgres_password_access" {
 
 # PostgreSQL VM (Primary backend - recommended)
 resource "google_compute_instance" "postgres" {
-  count        = var.use_postgresql ? 1 : 0
+  count        = var.use_postgresql && var.create_postgres_vm ? 1 : 0
   name         = "orchestrator-postgres-vm"
   machine_type = var.postgres_vm_machine_type
   zone         = "${var.region}-a"
@@ -395,7 +408,7 @@ resource "google_cloud_run_service" "orchestrator" {
       annotations = {
         "autoscaling.knative.dev/maxScale"        = var.max_instances
         "autoscaling.knative.dev/minScale"        = var.min_instances
-        "run.googleapis.com/vpc-access-connector" = google_vpc_access_connector.backend_connector.id
+        "run.googleapis.com/vpc-access-connector" = local.vpc_connector_id
         "run.googleapis.com/vpc-access-egress"    = "private-ranges-only"
       }
     }
