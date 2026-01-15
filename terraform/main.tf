@@ -371,6 +371,7 @@ resource "google_cloud_run_service" "orchestrator" {
     google_secret_manager_secret_iam_member.anthropic_api_key_access,
     google_secret_manager_secret_iam_member.github_token_access,
     google_secret_manager_secret_iam_member.webhook_url_access,
+    google_secret_manager_secret_iam_member.orchestrator_api_key_access,
     null_resource.build_image,
   ]
 
