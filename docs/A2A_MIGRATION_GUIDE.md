@@ -1,29 +1,58 @@
-# A2A Migration Guide
+# A2A Migration Guide - DEPRECATED ⚠️
 
-This guide helps you migrate from v1.0 (webhook-only) to v2.0 (A2A-enabled) Dependency Orchestrator.
+## This guide is no longer applicable (v2.0+)
 
-## Overview of Changes
+This document describes the migration path for v1.0 (webhook-only) to v2.0 with A2A protocol support **as originally designed with Redis/PostgreSQL task queues**.
 
-### What's New in v2.0
+However, **v2.0 has been refactored to a fully stateless architecture** that eliminates the need for external databases and task queues entirely.
+
+## Current v2.0 Architecture
+
+**v2.0 is now fully stateless** and uses FastAPI BackgroundTasks for async processing instead of Redis/PostgreSQL. This provides:
+
+- ✅ **Single Cloud Run container** (no multi-process setup)
+- ✅ **No external database required** (no PostgreSQL VM)
+- ✅ **No Redis Memorystore** needed (~$45/month savings)
+- ✅ **No VPC Connector** overhead
+- ✅ **~$1-5/month cost** vs $95/month for v1.0
+
+## See Also
+
+For current migration guidance:
+- **[A2A_MIGRATION_SUMMARY.md](../A2A_MIGRATION_SUMMARY.md)** - Documents the stateless refactor from v1.0 to v2.0
+- **[docs/SETUP.md](./SETUP.md)** - Current deployment guide for stateless v2.0
+- **[CLAUDE.md](../CLAUDE.md)** - Complete architecture & development guide
+
+## ARCHIVED CONTENT BELOW (for historical reference only)
+
+---
+
+# A2A Migration Guide (Historical - v2.0 with Redis/PostgreSQL)
+
+This guide helps you migrate from v1.0 (webhook-only) to v2.0 (A2A-enabled with task queues).
+
+## Overview of Changes (Historical)
+
+### What Was New in v2.0 (with Redis)
 
 1. **A2A Protocol Support**: Full Agent-to-Agent protocol implementation with 7 standardized skills
 2. **Async Task Processing**: Redis-backed task queue for long-running triage operations
 3. **Multi-Process Architecture**: Web server + worker processes managed by Supervisor
 4. **AgentCard Discovery**: Published at `/.well-known/agent.json` for automatic discovery
-5. **Bidirectional Agent Communication**: Can call other A2A agents (e.g., dev-nexus)
+5. **Bidirectional Agent Communication**: Could call other A2A agents (e.g., dev-nexus)
 
-### What's Unchanged
+### What Was Unchanged
 
-- **Legacy webhook endpoints** remain fully functional (`/api/webhook/*`, `/api/test/*`)
+- **Legacy webhook endpoints** remained fully functional (`/api/webhook/*`, `/api/test/*`)
 - **Triage agents** (consumer and template) logic unchanged
 - **Configuration format** (relationships.json) unchanged
 - **GitHub Actions integration** unchanged
 
-## Migration Checklist
+## Migration Checklist (Historical)
 
 ### For Existing Deployments
 
-- [ ] Review new architecture and cost implications (~$45/month added for Redis)
+- [ ] Review architecture and cost implications (~$45/month added for Redis)
 - [ ] Set up Redis Memorystore for async task processing
 - [ ] Update Cloud Run deployment with VPC connector
 - [ ] Update environment variables to include `REDIS_URL`
@@ -42,24 +71,24 @@ This guide helps you migrate from v1.0 (webhook-only) to v2.0 (A2A-enabled) Depe
 - [ ] Verify A2A endpoints are accessible
 - [ ] Configure GitHub Actions in source repositories
 
-## Breaking Changes
+## Breaking Changes (Historical)
 
-**None!** The migration is fully backward compatible. All v1.0 endpoints and functionality remain unchanged.
+**None!** The migration was fully backward compatible. All v1.0 endpoints and functionality remained unchanged.
 
-## New Environment Variables
+## New Environment Variables (Historical)
 
 ```bash
-# Required for A2A async features
+# Required for A2A async features (no longer needed in v2.0)
 export REDIS_URL="redis://10.x.x.x:6379/0"
 
-# All other environment variables remain the same
+# All other environment variables remained the same
 export ANTHROPIC_API_KEY="sk-ant-xxxxx"
 export GITHUB_TOKEN="ghp_xxxxx"
 export WEBHOOK_URL="https://discord.com/api/webhooks/xxxxx"  # optional
 export DEV_NEXUS_URL="https://dev-nexus-url"  # optional
 ```
 
-## Architecture Changes
+## Architecture Changes (Historical)
 
 ### v1.0 Architecture (Legacy)
 ```
@@ -70,7 +99,7 @@ GitHub Actions → Cloud Run (single process)
               GitHub Issues + Notifications
 ```
 
-### v2.0 Architecture (A2A)
+### v2.0 Architecture (A2A with Redis - Historical)
 ```
 GitHub Actions or A2A Agents → Cloud Run (web process)
                                     ↓
@@ -85,59 +114,57 @@ GitHub Actions or A2A Agents → Cloud Run (web process)
 Supervisor manages: [web process] + [2 worker processes]
 ```
 
-## File Structure Changes
+### v2.0 Architecture (Stateless - Current)
+```
+GitHub Actions or A2A Agents → Cloud Run (single process)
+                                    ↓
+                              BackgroundTasks (in-process)
+                                    ↓
+                              Triage Agents → Claude API
+                                    ↓
+                              GitHub Issues + Notifications
+```
 
-### New Files
+## File Structure Changes (Historical)
+
+### New Files (no longer in v2.0 stateless)
 ```
 orchestrator/
-├── a2a/                           # NEW: A2A protocol implementation
+├── a2a/                           # A2A protocol implementation (reduced in v2.0)
 │   ├── __init__.py
 │   ├── base.py                    # Base skill classes
 │   ├── registry.py                # Skills registry
 │   ├── server.py                  # A2A FastAPI server
 │   ├── client.py                  # A2A client for other agents
-│   ├── task_queue.py              # Redis Queue management
-│   ├── tasks.py                   # Background task functions
-│   └── skills/                    # A2A skills
+│   ├── task_queue.py              # [REMOVED] Redis Queue management
+│   ├── tasks.py                   # [REMOVED] Background task functions
+│   └── skills/                    # A2A skills (4 synchronous in v2.0)
 │       ├── __init__.py
 │       ├── receive_change_notification.py
 │       ├── get_impact_analysis.py
 │       ├── get_dependencies.py
-│       ├── get_orchestration_status.py
-│       ├── trigger_consumer_triage.py
-│       ├── trigger_template_triage.py
+│       ├── get_orchestration_status.py      # [REMOVED]
+│       ├── trigger_consumer_triage.py       # [REMOVED]
+│       ├── trigger_template_triage.py       # [REMOVED]
 │       └── add_dependency_relationship.py
-├── app_unified.py                 # NEW: Unified A2A + legacy server
-└── worker.py                      # NEW: RQ worker entry point
+├── app_unified.py                 # Unified A2A + legacy server
+└── worker.py                      # [REMOVED] RQ worker entry point
 
-supervisord.conf                   # NEW: Process manager config
-setup-redis-memorystore.sh         # NEW: Redis setup script
-docs/A2A_MIGRATION_GUIDE.md       # NEW: This document
+supervisord.conf                   # [REMOVED] Process manager config
+setup-redis-memorystore.sh         # [REMOVED] Redis setup script
+docs/A2A_MIGRATION_GUIDE.md       # This document
 ```
 
-### Modified Files
+### Modified Files (Historical)
 ```
-requirements.txt                   # Added redis, rq, supervisor
-Dockerfile                         # Multi-process setup with Supervisor
-cloudbuild.yaml                    # Added VPC connector and Redis URL
-deploy-gcp-cloudbuild.sh          # Added Redis API enablement
-CLAUDE.md                          # Added A2A documentation
-```
-
-### Unchanged Files
-```
-orchestrator/
-├── agents/                        # Triage agents unchanged
-│   ├── consumer_triage.py
-│   └── template_triage.py
-├── clients/                       # Dev-nexus client unchanged
-│   └── dev_nexus_client.py
-└── app.py                         # Legacy app (deprecated, use app_unified.py)
-
-config/relationships.json          # Configuration unchanged
+requirements.txt                   # Added redis, rq, supervisor (now removed)
+Dockerfile                         # Multi-process setup with Supervisor (now simplified)
+cloudbuild.yaml                    # Added VPC connector and Redis URL (now removed)
+deploy-gcp-cloudbuild.sh          # Added Redis API enablement (now removed)
+CLAUDE.md                          # Added A2A documentation (now updated)
 ```
 
-## Deployment Changes
+## Deployment Changes (Historical)
 
 ### Old Deployment (v1.0)
 ```bash
@@ -145,7 +172,7 @@ config/relationships.json          # Configuration unchanged
 ./deploy-gcp-cloudbuild.sh
 ```
 
-### New Deployment (v2.0)
+### New Deployment (v2.0 with Redis - Historical)
 ```bash
 # Three steps: infrastructure + redis + app
 
@@ -161,7 +188,15 @@ terraform apply
 ./deploy-gcp-cloudbuild.sh
 ```
 
-## Testing the Migration
+### Current Deployment (v2.0 Stateless)
+```bash
+# Single step: deploy with Cloud Build or local Docker
+./deploy-gcp-cloudbuild.sh
+# or
+./deploy-gcp.sh
+```
+
+## Testing the Migration (Historical)
 
 ### 1. Verify Legacy Endpoints Still Work
 ```bash
@@ -199,33 +234,13 @@ curl -X POST https://your-service-url/a2a/execute \
   }'
 ```
 
-### 3. Verify Async Task Processing
+### 3. Verify Async Task Processing (Historical - no longer applicable)
 ```bash
-# Trigger async triage
-RESPONSE=$(curl -X POST https://your-service-url/a2a/execute \
-  -H "Content-Type: application/json" \
-  -d '{
-    "skill_name": "trigger_consumer_triage",
-    "input_data": {
-      "source_repo": "owner/source",
-      "consumer_repo": "owner/consumer",
-      "change_event": {...}
-    }
-  }')
-
-# Extract task_id from response
-TASK_ID=$(echo $RESPONSE | jq -r '.data.task_id')
-
-# Poll task status
-curl -X POST https://your-service-url/a2a/execute \
-  -H "Content-Type: application/json" \
-  -d "{
-    \"skill_name\": \"get_orchestration_status\",
-    \"input_data\": {\"task_id\": \"$TASK_ID\"}
-  }"
+# This feature has been removed in the stateless v2.0 refactor
+# Background tasks are now processed in-process without task_id tracking
 ```
 
-## Rollback Plan
+## Rollback Plan (Historical)
 
 If you need to rollback to v1.0:
 
@@ -253,27 +268,24 @@ If you need to rollback to v1.0:
      --region us-central1
    ```
 
-## Cost Impact
+## Cost Impact (Historical)
 
 ### v1.0 Costs
-- Cloud Run: ~$50/month (estimated, varies with usage)
+- Cloud Run: ~$50/month
 
-### v2.0 Costs
-- Cloud Run: ~$50/month (same, slightly more CPU/RAM but similar usage)
+### v2.0 Costs with Redis (Historical)
+- Cloud Run: ~$50/month
 - Redis Memorystore: ~$45/month (Basic tier, 1GB)
-- VPC Connector: ~$0 (no additional cost)
+- VPC Connector: ~$0
 - **Total: ~$95/month**
 
-## Support
+### v2.0 Costs Stateless (Current)
+- Cloud Run: ~$1-5/month (auto-scales to 0)
+- **Total: ~$1-5/month** ✅
 
-For issues or questions about the A2A migration:
-- Check the updated CLAUDE.md documentation
-- Review the conversion plan: https://github.com/patelmm79/dev-nexus/blob/main/docs/DEPENDENCY_ORCHESTRATOR_A2A_CONVERSION_PLAN.md
-- Review A2A protocol docs: https://a2a-protocol.org/latest/
+## References
 
-## Timeline
-
-- **v1.0**: Legacy webhook-only version (deprecated)
-- **v2.0**: A2A-enabled version (current)
-- **Deprecation**: v1.0 endpoints will be maintained indefinitely for backward compatibility
-- **Recommended**: All new deployments should use v2.0
+- **Current Stateless Guide**: [A2A_MIGRATION_SUMMARY.md](../A2A_MIGRATION_SUMMARY.md)
+- **Current Setup Guide**: [docs/SETUP.md](./SETUP.md)
+- **Architecture & Development**: [CLAUDE.md](../CLAUDE.md)
+- **A2A Protocol Docs**: [docs/A2A_README.md](./A2A_README.md)

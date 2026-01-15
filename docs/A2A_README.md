@@ -1,8 +1,8 @@
-# A2A Protocol Implementation
+# A2A Protocol Implementation - v2.0
 
 ## Overview
 
-Dependency Orchestrator v2.0 is a fully A2A-compliant agent that exposes 7 standardized skills for dependency orchestration and impact analysis across repository relationships.
+Dependency Orchestrator v2.0 is a fully A2A-compliant stateless agent that exposes 4 standardized skills for dependency orchestration and impact analysis across repository relationships.
 
 ## What is A2A?
 
@@ -10,11 +10,11 @@ The Agent-to-Agent (A2A) protocol is an open standard developed by Google and do
 
 **Key Benefits:**
 - **Interoperability**: Connect agents across different platforms (LangGraph, CrewAI, etc.)
-- **Task Delegation**: Agents can delegate subtasks and coordinate complex workflows
+- **Task Delegation**: Agents can delegate analysis and coordination tasks
 - **Discovery**: AgentCard publishing enables automatic capability discovery
 - **Security**: Agents collaborate without exposing internal logic
 
-## AgentCard
+## AgentCard Discovery
 
 The Dependency Orchestrator publishes its AgentCard at:
 ```
@@ -27,7 +27,7 @@ https://your-service-url/.well-known/agent.json
   "agent": {
     "name": "dependency-orchestrator",
     "display_name": "Dependency Orchestrator",
-    "description": "AI-powered dependency orchestration agent",
+    "description": "Stateless AI-powered dependency orchestration agent",
     "version": "2.0.0",
     "vendor": "patelmm79",
     "capabilities": [
@@ -35,7 +35,7 @@ https://your-service-url/.well-known/agent.json
       "impact_analysis",
       "consumer_triage",
       "template_sync",
-      "async_orchestration"
+      "stateless_orchestration"
     ]
   },
   "skills": [...],
@@ -51,12 +51,18 @@ https://your-service-url/.well-known/agent.json
 }
 ```
 
-## Skills Reference
+## Skills Reference (4 Synchronous Skills)
 
-### Events (Fire-and-Forget)
+### Events (Entry Points)
 
 #### `receive_change_notification`
 Primary entry point for change notifications from source repositories.
+
+**Behavior:**
+- Validates incoming change events
+- Identifies dependent repositories
+- Returns list of dependents for orchestration
+- Background tasks trigger async triage (stateless)
 
 **Input:**
 ```json
@@ -65,8 +71,17 @@ Primary entry point for change notifications from source repositories.
   "commit_sha": "abc123",
   "commit_message": "feat: add new endpoint",
   "branch": "main",
-  "changed_files": [...],
-  "pattern_summary": {...},
+  "changed_files": [
+    {
+      "path": "app.py",
+      "change_type": "M",
+      "diff": "..."
+    }
+  ],
+  "pattern_summary": {
+    "keywords": ["api", "endpoint"],
+    "patterns": ["API endpoint modification"]
+  },
   "timestamp": "2025-01-15T10:30:00Z"
 }
 ```
@@ -76,15 +91,16 @@ Primary entry point for change notifications from source repositories.
 {
   "status": "accepted",
   "source_repo": "owner/repo",
-  "consumers_scheduled": [
-    {"repo": "owner/consumer1", "task_id": "task-123"}
-  ],
-  "derivatives_scheduled": [
-    {"repo": "owner/derivative1", "task_id": "task-456"}
-  ],
-  "total_dependents": 2
+  "dependents": {
+    "consumers": ["owner/consumer1", "owner/consumer2"],
+    "derivatives": ["owner/fork1"]
+  }
 }
 ```
+
+**Note:** Actual orchestration/triage is handled at the HTTP/webhook layer with FastAPI BackgroundTasks. No task_id returned (stateless).
+
+---
 
 ### Queries (Synchronous Data Retrieval)
 
@@ -113,6 +129,10 @@ Synchronously analyze impact of changes on a specific dependent repository.
   "reasoning": "Detected removal of /v1/predict endpoint..."
 }
 ```
+
+**Use Case:** Direct synchronous analysis without queuing (useful for dev-nexus integration).
+
+---
 
 #### `get_dependencies`
 Retrieve dependency graph for a repository.
@@ -145,94 +165,26 @@ Retrieve dependency graph for a repository.
 }
 ```
 
-#### `get_orchestration_status`
-Poll status of async orchestration tasks.
+**Use Case:** Graph queries for understanding ecosystem structure and dependencies.
 
-**Input:**
-```json
-{
-  "task_id": "task-123"
-}
-```
-
-**Output:**
-```json
-{
-  "task_id": "task-123",
-  "status": "finished",
-  "created_at": "2025-01-15T10:30:00Z",
-  "started_at": "2025-01-15T10:30:02Z",
-  "ended_at": "2025-01-15T10:30:45Z",
-  "result": {
-    "requires_action": true,
-    "urgency": "high",
-    ...
-  }
-}
-```
+---
 
 ### Actions (Mutating Operations)
 
-#### `trigger_consumer_triage`
-Manually trigger async consumer triage analysis.
-
-**Requires Authentication**: Yes
-
-**Input:**
-```json
-{
-  "source_repo": "owner/source",
-  "consumer_repo": "owner/consumer",
-  "change_event": {...}
-}
-```
-
-**Output:**
-```json
-{
-  "status": "enqueued",
-  "task_id": "task-789",
-  "message": "Consumer triage analysis scheduled"
-}
-```
-
-#### `trigger_template_triage`
-Manually trigger async template sync analysis.
-
-**Requires Authentication**: Yes
-
-**Input:**
-```json
-{
-  "template_repo": "owner/template",
-  "derivative_repo": "owner/derivative",
-  "change_event": {...}
-}
-```
-
-**Output:**
-```json
-{
-  "status": "enqueued",
-  "task_id": "task-012",
-  "message": "Template sync analysis scheduled"
-}
-```
-
 #### `add_dependency_relationship`
-Add or update dependency relationships in configuration.
-
-**Requires Authentication**: Yes
+Add or update a repository dependency relationship.
 
 **Input:**
 ```json
 {
   "source_repo": "owner/source",
   "target_repo": "owner/target",
-  "relationship_type": "api_consumer",
-  "relationship_config": {
+  "relationship_type": "api_consumer|template_fork",
+  "config": {
     "interface_files": ["src/client.py"],
-    "change_triggers": ["api_contract", "authentication"]
+    "change_triggers": ["api_contract", "authentication"],
+    "shared_concerns": ["infrastructure", "docker"],
+    "divergent_concerns": ["application_logic"]
   }
 }
 ```
@@ -240,198 +192,153 @@ Add or update dependency relationships in configuration.
 **Output:**
 ```json
 {
-  "status": "success",
-  "message": "Added new consumer relationship",
-  "relationship": {...}
+  "status": "updated",
+  "source_repo": "owner/source",
+  "target_repo": "owner/target",
+  "relationship_type": "api_consumer"
 }
 ```
 
-## Using the A2A Client
+**Use Case:** Dynamic relationship configuration from other agents.
 
-The orchestrator includes an A2A client for calling other A2A agents:
+---
 
-```python
-from orchestrator.a2a.client import A2AClient, DevNexusA2AClient
+## Architecture: Stateless Design
 
-# Generic A2A client
-client = A2AClient(
-    base_url="https://other-agent-url",
-    api_key="optional-api-key"
-)
+### What Changed from v1.0
 
-# Discover agent capabilities
-agent_card = client.discover_agent()
+| Aspect | v1.0 | v2.0 |
+|--------|------|------|
+| **Task Queue** | Redis + PostgreSQL | None (BackgroundTasks) |
+| **Worker Processes** | 2-3 workers | None (in-process) |
+| **Async Skills** | 7 skills (3 async) | 4 skills (all sync) |
+| **Deployment** | Multi-container | Single container |
+| **Memory** | 1GB | 512Mi |
+| **Cost** | ~$95/month | ~$1-5/month |
+| **State Persistence** | Task queue | None (stateless) |
 
-# List available skills
-skills = client.list_skills(category="query")
+### Background Task Processing
 
-# Execute a skill
-result = client.execute_skill(
-    skill_name="query_data",
-    input_data={"query": "..."}
-)
+When `receive_change_notification` is called:
 
-# Dev-nexus specific client
-dev_nexus = DevNexusA2AClient(
-    base_url="https://dev-nexus-url",
-    api_key="api-key"
-)
+1. **HTTP Request** → Validats notification, returns 202 Accepted
+2. **Background Task** → Scheduled immediately (no queue)
+3. **In-Process Execution** → Triage agents run in FastAPI process
+4. **Results** → Posted to dev-nexus (if configured) or GitHub issues created
 
-# Query architecture knowledge
-arch_info = dev_nexus.query_architecture(
-    repo="owner/repo",
-    query="deployment platform"
-)
-
-# Post lesson learned
-dev_nexus.post_lesson_learned(
-    repo="owner/repo",
-    lesson="Breaking API changes require immediate action",
-    confidence=0.95,
-    category="consumer_triage"
-)
+```
+Request → Validate → Return 202 → Background Task → Triage → Results
+         (< 100ms)              (async, non-blocking)
 ```
 
-## Task Queue Architecture
+---
 
-### Redis Queue (RQ)
+## Usage Examples
 
-The orchestrator uses Redis Queue for async task processing:
-
-**Task Lifecycle:**
-1. Skill execution creates task via `task_queue.enqueue_task()`
-2. Task stored in Redis with unique task_id
-3. RQ worker picks up task from queue
-4. Worker executes triage agent (calls Claude API, GitHub API)
-5. Result stored in Redis with 24-hour TTL
-6. Client polls status via `get_orchestration_status` skill
-
-**Configuration:**
-- **Queue**: Default queue, 10-minute task timeout
-- **Result TTL**: 24 hours
-- **Workers**: 2 worker processes (configurable in supervisord.conf)
-- **Concurrency**: Workers process tasks in parallel
-
-### Monitoring Tasks
-
+### 1. Get Agent Capabilities
 ```bash
-# View queue status
-rq info --url redis://your-redis-url/0
-
-# List all tasks
-rq worker-pool --url redis://your-redis-url/0
-
-# View failed tasks
-rq list failed --url redis://your-redis-url/0
-
-# Retry failed tasks
-rq retry failed --url redis://your-redis-url/0
+curl https://your-orchestrator-url/.well-known/agent.json
 ```
 
-## Authentication
-
-**Query Skills**: No authentication required (read-only)
-
-**Action Skills**: Require API key authentication
-
-**Header:**
-```
-X-API-Key: your-orchestrator-api-key
-```
-
-**Setting API Key:**
+### 2. List Available Skills
 ```bash
-export ORCHESTRATOR_API_KEY="your-secret-key"
-export REQUIRE_AUTH="true"
+curl https://your-orchestrator-url/a2a/skills
 ```
+
+### 3. Query Dependency Graph
+```bash
+curl -X POST https://your-orchestrator-url/a2a/execute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "skill_name": "get_dependencies",
+    "input_data": {
+      "repo": "owner/vllm-container-ngc"
+    }
+  }'
+```
+
+### 4. Analyze Change Impact
+```bash
+curl -X POST https://your-orchestrator-url/a2a/execute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "skill_name": "get_impact_analysis",
+    "input_data": {
+      "source_repo": "owner/source",
+      "target_repo": "owner/consumer",
+      "relationship_type": "consumer",
+      "change_event": {...}
+    }
+  }'
+```
+
+### 5. Receive Change Notification
+```bash
+curl -X POST https://your-orchestrator-url/a2a/execute \
+  -H "Content-Type: application/json" \
+  -d '{
+    "skill_name": "receive_change_notification",
+    "input_data": {
+      "source_repo": "owner/vllm-container-ngc",
+      "commit_sha": "abc123",
+      "commit_message": "Fix health check endpoint",
+      "branch": "main",
+      "changed_files": [...]
+    }
+  }'
+```
+
+Returns: `{"status": "accepted", "dependents": {...}}`
+
+**Note:** Returns immediately (202). Triage happens asynchronously in background.
+
+---
 
 ## Integration with Dev-Nexus
 
-The orchestrator integrates with dev-nexus via A2A protocol:
+The Dependency Orchestrator integrates with [dev-nexus](https://github.com/patelmm79/dev-nexus):
 
-**Before Triage:**
-- Query dev-nexus for architecture context
-- Enrich triage prompts with deployment patterns
-- Improve accuracy of impact assessment
+1. **Receives notifications** → Validates change events
+2. **Runs async triage** → Analyzes impact (BackgroundTask)
+3. **Posts lessons learned** → Contributes insights to dev-nexus
+4. **Creates GitHub issues** → Logs recommendations in affected repos
 
-**After Triage:**
-- Post lessons learned to dev-nexus
-- Share impact patterns across repos
-- Build cross-repo knowledge base
+---
 
-**Configuration:**
-```bash
-export DEV_NEXUS_URL="https://dev-nexus-service-url"
-```
+## Performance Characteristics
 
-The orchestrator will automatically discover dev-nexus capabilities via AgentCard and use A2A protocol for communication.
+### Response Times
+- **`receive_change_notification`** (validate): < 100ms
+- **`get_dependencies`** (graph query): 50-200ms
+- **`get_impact_analysis`** (sync triage): 30-60s (runs Claude API)
+- **`add_dependency_relationship`** (config update): < 50ms
 
-## Performance Considerations
+### Background Triage
+- Starts: Immediately after HTTP 202 response
+- Duration: 30-60 seconds per repository
+- Failures: Logged, don't block orchestrator
+- Retry: Not implemented (simple execution model)
 
-**Synchronous vs Async:**
-- **Synchronous** (`get_impact_analysis`): Use for immediate results, blocks until complete (~30-60s)
-- **Async** (`trigger_*_triage`): Use for batch operations, returns immediately with task_id
-
-**Task Queue Capacity:**
-- Default: 2 workers processing tasks in parallel
-- Increase workers: Edit `numprocs` in supervisord.conf
-- Redis capacity: 1GB supports ~10,000 tasks in queue
-
-**Cost Optimization:**
-- Async tasks reduce API request concurrency
-- Workers can be scaled based on workload
-- Redis caching reduces redundant API calls
+---
 
 ## Error Handling
 
-**Skill Execution Errors:**
+All A2A skills return structured error responses:
+
 ```json
 {
-  "success": false,
-  "error": "Skill not found: invalid_skill",
-  "task_id": null
+  "error": "invalid_input",
+  "message": "Missing required field: source_repo",
+  "details": {...}
 }
 ```
 
-**Task Failures:**
-- Failed tasks stored in Redis with error details
-- Accessible via `get_orchestration_status`
-- Can be retried manually via `rq retry` command
+No task_id to poll (stateless architecture).
 
-**Worker Failures:**
-- Supervisor automatically restarts crashed workers
-- Tasks remain in queue and are retried
-- Check logs: `gcloud logging tail "resource.labels.service_name=architecture-kb-orchestrator"`
+---
 
-## Best Practices
+## See Also
 
-1. **Use Async for Batch Operations**: Trigger multiple triage analyses, poll results later
-2. **Poll Task Status**: Don't rely on immediate results for async operations
-3. **Set Proper Timeouts**: Long-running analyses can take 2-5 minutes
-4. **Monitor Queue Depth**: Alert if queue grows beyond expected bounds
-5. **Use AgentCard Discovery**: Always call `/.well-known/agent.json` first
-6. **Cache Dependency Graph**: `get_dependencies` results change infrequently
-
-## Troubleshooting
-
-**Issue**: A2A endpoints return 404
-- **Solution**: Ensure using `app_unified.py` not legacy `app.py`
-
-**Issue**: Async tasks stuck in "queued" status
-- **Solution**: Check RQ workers are running: `ps aux | grep rq`
-
-**Issue**: Redis connection errors
-- **Solution**: Verify `REDIS_URL` environment variable and VPC connector
-
-**Issue**: Tasks timing out
-- **Solution**: Increase timeout in `task_queue.py` (default: 10 minutes)
-
-**Issue**: High Redis memory usage
-- **Solution**: Reduce result TTL or increase Redis instance size
-
-## Further Reading
-
-- [A2A Protocol Specification](https://a2a-protocol.org/latest/)
-- [Migration Guide](./A2A_MIGRATION_GUIDE.md)
-- [Deployment Guide](../CLAUDE.md)
-- [Conversion Plan](https://github.com/patelmm79/dev-nexus/blob/main/docs/DEPENDENCY_ORCHESTRATOR_A2A_CONVERSION_PLAN.md)
+- **[CLAUDE.md](../CLAUDE.md)** - Complete architecture & deployment guide
+- **[README.md](../README.md)** - General project documentation
+- **[docs/GITHUB_ACTIONS_SETUP.md](GITHUB_ACTIONS_SETUP.md)** - Webhook configuration

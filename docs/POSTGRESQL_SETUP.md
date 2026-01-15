@@ -1,28 +1,44 @@
-## PostgreSQL Setup Guide
+# PostgreSQL Setup - DEPRECATED ⚠️
 
-### Overview
+## This guide is no longer applicable (v2.0+)
 
-Dependency Orchestrator uses **PostgreSQL as the primary backend** for task queue management, following the same approach as dev-nexus. PostgreSQL provides:
+As of v2.0, the Dependency Orchestrator has been refactored to a **fully stateless architecture**. It no longer requires:
+- PostgreSQL database
+- Redis Memorystore
+- VPC connectors
+- Worker processes
 
-- **Lower cost**: ~$5-10/month (vs ~$45/month for Redis)
-- **Free tier eligible**: e2-micro VM
-- **Better persistence**: Relational database with full ACID compliance
-- **Rich querying**: SQL-based task management and analytics
-- **Audit trails**: Built-in task history tracking
+### What Changed
 
-### Architecture
+**Previous (v1.0):**
+- PostgreSQL VM with task queue tables
+- VPC Connector for Cloud Run ↔ Database communication
+- Worker processes for async task execution
+- ~$95/month infrastructure cost
 
-```
-Cloud Run (orchestrator)
-├── Web Process → VPC Connector → PostgreSQL VM (10.8.0.2:5432)
-└── Worker Processes → VPC Connector → PostgreSQL VM (task queue)
-```
+**Current (v2.0):**
+- Stateless FastAPI service with BackgroundTasks
+- Single Cloud Run container
+- No external database required
+- ~$1-5/month cost
 
-**Key Components:**
-- **PostgreSQL VM**: e2-micro instance (free tier eligible)
-- **Database**: `orchestrator` with task queue tables
-- **VPC Connector**: Secure Cloud Run ↔ PostgreSQL communication
-- **Internal IP**: 10.8.0.2 (no public internet access)
+### Migration Path
+
+If you were using v1.0 with PostgreSQL:
+
+1. **No migration needed** - Simply redeploy with the new stateless version
+2. **Existing task data is not preserved** - Tasks are processed in-memory
+3. **Dev-nexus remains coordination platform** - For any persistent state needs
+
+### See Also
+
+- **[CLAUDE.md](../CLAUDE.md)** - Complete stateless architecture documentation
+- **[README.md](../README.md)** - Current deployment guide
+- **[SETUP.md](SETUP.md)** - Simplified single-step deployment
+
+---
+
+## ARCHIVED CONTENT BELOW (for historical reference only)
 
 ### Deployment Options
 
