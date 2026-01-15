@@ -12,57 +12,49 @@ The Dependency Orchestrator is an AI-powered service that coordinates automated 
 
 ### What is A2A?
 
-The Agent-to-Agent (A2A) protocol is an open standard for AI agent communication and collaboration. Dependency Orchestrator now exposes its capabilities through standardized A2A endpoints, allowing other agents (like dev-nexus) to discover and invoke orchestration skills programmatically.
+The Agent-to-Agent (A2A) protocol is an open standard for AI agent communication and collaboration. Dependency Orchestrator exposes its capabilities through standardized A2A endpoints, allowing other agents (like dev-nexus) to discover and invoke orchestration skills programmatically.
 
 ### Key Features
 
 - **AgentCard Discovery**: Publish capabilities at `/.well-known/agent.json` for automatic discovery
-- **7 A2A Skills**: Standardized skills for dependency orchestration (events, queries, actions)
-- **Async Task Processing**: Redis-backed task queue for long-running impact analyses
-- **Bidirectional Communication**: Can both receive A2A requests and call other A2A agents
+- **4 A2A Skills**: Synchronous skills for dependency orchestration (events, queries)
+- **Stateless Design**: No database or task queue required - uses FastAPI BackgroundTasks
 - **Backward Compatible**: Legacy webhook endpoints remain fully functional
+- **Low Operational Overhead**: Single container deployment, minimal resources
 
 ### A2A Skills Available
 
-The orchestrator exposes 7 skills across 4 categories:
+The orchestrator exposes 4 skills:
 
-**Events (fire-and-forget notifications)**
-- `receive_change_notification` - Primary entry point for change events
+**Events (entry points)**
+- `receive_change_notification` - Receive and validate change notifications
 
 **Queries (synchronous data retrieval)**
-- `get_impact_analysis` - Analyze impact of specific changes on a target repo
+- `get_impact_analysis` - Synchronously analyze impact of changes on a target repo
 - `get_dependencies` - Retrieve dependency graph for a repository
-- `get_orchestration_status` - Poll status of async tasks
 
 **Actions (mutating operations)**
-- `trigger_consumer_triage` - Manually trigger consumer impact analysis
-- `trigger_template_triage` - Manually trigger template sync analysis
 - `add_dependency_relationship` - Add/update relationship configuration
 
-### Architecture Changes in v2.0
+### Architecture: Stateless Design
 
-**Multi-Process Design**:
-- Web process: FastAPI server handling HTTP requests (A2A + legacy)
-- Worker processes: PostgreSQL/RQ workers processing async triage tasks
-- Backend: PostgreSQL (primary) or Redis (secondary) for task queue
-- Supervisor: Process manager orchestrating web + workers
+**Single-Process Design**:
+- FastAPI server: Handles all HTTP requests (A2A + legacy)
+- BackgroundTasks: In-process async execution (no separate workers)
+- No external database or cache required
+- Request → HTTP 202 → Background processing
 
 **Deployment Stack**:
-- Cloud Run: Single service running both web and workers via Supervisor
-- **PostgreSQL VM**: Primary backend (e2-micro, ~$5-10/month, free tier eligible) **[RECOMMENDED]**
-- **Redis Memorystore**: Secondary backend option (1GB, ~$45/month)
-- VPC Connector: Allows Cloud Run to access PostgreSQL/Redis in VPC
+- Cloud Run: Single container, minimal configuration
+- No VPC connector, PostgreSQL VM, or Redis needed
+- **Estimated cost**: ~$1-5/month (just Cloud Run compute)
+- Auto-scales from 0 instances based on traffic
 
-**Backend Comparison**:
-| Feature | PostgreSQL (Primary) | Redis (Secondary) |
-|---------|---------------------|-------------------|
-| **Cost** | ~$5-10/month | ~$45/month |
-| **Free Tier** | ✅ e2-micro eligible | ❌ No free tier |
-| **Persistence** | Full ACID database | In-memory + snapshots |
-| **Querying** | SQL-based analytics | Limited |
-| **Audit Trail** | Built-in task history | Manual implementation |
-| **Setup** | VM-based | Managed service |
-| **Recommended** | ✅ Yes | For high-throughput only |
+**Why Stateless**:
+- Simpler operations (single service, no dependencies)
+- Faster deployment (no infrastructure setup)
+- Cost-effective (minimal compute needed)
+- Dev-nexus handles orchestration state if required
 
 ### Using A2A Endpoints
 
@@ -73,35 +65,35 @@ curl https://orchestrator-url/.well-known/agent.json
 # List available skills
 curl https://orchestrator-url/a2a/skills
 
-# Execute a skill (query dependencies)
+# Get synchronous impact analysis
 curl -X POST https://orchestrator-url/a2a/execute \
   -H "Content-Type: application/json" \
   -d '{
-    "skill_name": "get_dependencies",
-    "input_data": {"repo": "owner/repo"}
-  }'
-
-# Trigger async consumer triage
-curl -X POST https://orchestrator-url/a2a/execute \
-  -H "Content-Type: application/json" \
-  -H "X-API-Key: your-api-key" \
-  -d '{
-    "skill_name": "trigger_consumer_triage",
+    "skill_name": "get_impact_analysis",
     "input_data": {
       "source_repo": "owner/source",
-      "consumer_repo": "owner/consumer",
+      "target_repo": "owner/consumer",
+      "relationship_type": "consumer",
       "change_event": {...}
     }
   }'
 
-# Poll task status
+# Receive change notification (webhook/A2A)
 curl -X POST https://orchestrator-url/a2a/execute \
   -H "Content-Type: application/json" \
   -d '{
-    "skill_name": "get_orchestration_status",
-    "input_data": {"task_id": "abc-123"}
+    "skill_name": "receive_change_notification",
+    "input_data": {
+      "source_repo": "owner/source",
+      "commit_sha": "abc123",
+      "commit_message": "Fix API endpoint",
+      "branch": "main",
+      "changed_files": [...]
+    }
   }'
 ```
+
+Note: Async orchestration is handled through background tasks. HTTP 202 indicates task accepted; results are processed asynchronously.
 
 ## Development Commands
 
@@ -117,59 +109,22 @@ export GITHUB_TOKEN="ghp_xxxxx"
 # Optional environment variables
 export WEBHOOK_URL="https://discord.com/api/webhooks/xxxxx"  # Discord/Slack notifications
 export DEV_NEXUS_URL="https://dev-nexus-xxxxx-uc.a.run.app"  # Dev-nexus integration
-
-# Backend Selection (PostgreSQL is default/recommended)
-export USE_POSTGRESQL="true"  # Use PostgreSQL (primary backend)
-
-# PostgreSQL connection (if USE_POSTGRESQL=true)
-export POSTGRES_HOST="localhost"  # or VM IP: 10.8.0.2
-export POSTGRES_PORT="5432"
-export POSTGRES_DB="orchestrator"
-export POSTGRES_USER="orchestrator"
-export POSTGRES_PASSWORD="your-password"
-
-# OR use Redis (secondary backend, if USE_POSTGRESQL=false)
-export USE_POSTGRESQL="false"
-export REDIS_URL="redis://localhost:6379/0"
-
-# Start local PostgreSQL (recommended)
-docker run -d -p 5432:5432 \
-  -e POSTGRES_DB=orchestrator \
-  -e POSTGRES_USER=orchestrator \
-  -e POSTGRES_PASSWORD=your-password \
-  postgres:15-alpine
-
-# Initialize schema
-psql -h localhost -U orchestrator -d orchestrator -f orchestrator/a2a/postgres_schema.sql
-
-# OR start local Redis (fallback option)
-docker run -d -p 6379:6379 redis:7-alpine
+export REQUIRE_AUTH="false"  # Set to "true" to require API key authentication
+export ORCHESTRATOR_API_KEY="your-api-key-here"  # Required if REQUIRE_AUTH=true
 ```
 
 ### Running Locally
 ```bash
-# Option 1: Web server only (for development/testing)
-# Legacy endpoints work, but A2A async features will fail without Redis
+# Start the service locally (all endpoints work, no external dependencies)
 uvicorn orchestrator.app_unified:app --reload --port 8080
 
-# Option 2: Full multi-process setup (web + workers)
-# Start Redis first, then run supervisor
-supervisord -c supervisord.conf
-
-# Option 3: Manual web + worker processes (for debugging)
-# Terminal 1 - Web server
-uvicorn orchestrator.app_unified:app --reload --port 8080
-
-# Terminal 2 - RQ worker
-rq worker --url redis://localhost:6379/0
-
-# Terminal 3 - Monitor task queue
-rq info --url redis://localhost:6379/0
+# In production, use gunicorn for multi-worker support
+gunicorn orchestrator.app_unified:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8080
 ```
 
 ### Testing
 ```bash
-# Health check (shows A2A status)
+# Health check
 curl http://localhost:8080/
 
 # A2A AgentCard discovery
@@ -181,29 +136,28 @@ curl http://localhost:8080/a2a/skills
 # A2A health check
 curl http://localhost:8080/a2a/health
 
-# Legacy: View configured relationships
+# View configured relationships
 curl http://localhost:8080/api/relationships
 
-# Legacy: Test consumer triage agent (synchronous)
+# Test consumer triage agent (synchronous)
 curl -X POST http://localhost:8080/api/test/consumer-triage \
   -H "Content-Type: application/json" \
   -d @test/consumer_test.json
 
-# Legacy: Test template triage agent (synchronous)
+# Test template triage agent (synchronous)
 curl -X POST http://localhost:8080/api/test/template-triage \
   -H "Content-Type: application/json" \
   -d @test/template_test.json
 
-# A2A: Trigger async consumer triage
-curl -X POST http://localhost:8080/a2a/execute \
+# Test change notification (processes asynchronously in background)
+curl -X POST http://localhost:8080/api/webhook/change-notification \
   -H "Content-Type: application/json" \
   -d '{
-    "skill_name": "trigger_consumer_triage",
-    "input_data": {
-      "source_repo": "owner/source",
-      "consumer_repo": "owner/consumer",
-      "change_event": {...}
-    }
+    "source_repo": "owner/source",
+    "commit_sha": "abc123",
+    "commit_message": "Update API",
+    "branch": "main",
+    "changed_files": []
   }'
 ```
 
@@ -221,227 +175,50 @@ This separate guide includes:
 
 ### Deployment
 
-**A2A-Enhanced Deployment (v2.0)**
+**Stateless Deployment to Cloud Run**
 
-The A2A-enabled version requires additional infrastructure for async task processing:
+The orchestrator is a stateless FastAPI service that deploys easily to Cloud Run with minimal infrastructure.
 
-**Three-Step Process:**
-1. **Infrastructure Setup** (one-time): Secrets, IAM, Cloud Run service skeleton
-2. **Redis Memorystore Setup** (one-time): Task queue for A2A async operations
-3. **Application Deployment** (ongoing): Build and deploy your code
-
-You can use Terraform for step 1, or let the deployment scripts handle both steps.
-
-**Key Changes in v2.0:**
-- Multi-process deployment (web + workers via Supervisor)
-- Redis Memorystore required for async A2A features
-- VPC Connector needed for Cloud Run → Redis connectivity
-- Increased resource allocation (1GB RAM, 2 CPU cores)
-- Estimated cost: ~$95/month (Cloud Run ~$50 + Redis ~$45)
-
----
-
-#### Infrastructure Setup: Option A - Terraform (Recommended)
-
-**Use Terraform to manage infrastructure as code.**
-
-**What Terraform does:**
-- Enables required GCP APIs (cloudbuild, run, secretmanager)
-- Creates Secret Manager secrets with IAM bindings
-- Configures Cloud Run service account with secret access
-- Creates Cloud Run service skeleton (no application code yet)
-- **Does NOT build or deploy your application**
-
-**Prerequisites:**
+**Single-Step Deployment:**
 ```bash
-# Install Terraform
-# https://developer.hashicorp.com/terraform/downloads
-
-# Authenticate with GCP
-gcloud auth login
-gcloud auth application-default login
-
-# Navigate to terraform directory
-cd terraform
-
-# Copy example tfvars and configure
-cp terraform.tfvars.example terraform.tfvars
-# Edit terraform.tfvars with your values:
-#   - project_id
-#   - anthropic_api_key
-#   - github_token
-#   - webhook_url (optional)
-```
-
-**Deploy infrastructure:**
-```bash
-# Initialize Terraform
-terraform init
-
-# Review planned changes
-terraform plan
-
-# Apply configuration
-terraform apply
-```
-
-**After Terraform completes, set up Redis and deploy application:**
-
-Step 1: Setup Redis Memorystore (required for A2A async features)
-```bash
-cd ..
-./setup-redis-memorystore.sh
-```
-
-This will:
-- Create Redis Memorystore instance (1GB, ~$45/month)
-- Create VPC connector for Cloud Run → Redis connectivity
-- Output Redis connection details
-
-Step 2: Update cloudbuild.yaml with Redis URL
-```bash
-# Copy the Redis URL from the setup script output
-# Edit cloudbuild.yaml and update the _REDIS_URL substitution variable
-# Example: _REDIS_URL: 'redis://10.123.45.67:6379/0'
-```
-
-Step 3: Deploy application code (choose one)
-
-Option A: Cloud Build (no Docker needed)
-```bash
-./deploy-gcp-cloudbuild.sh
-```
-
-Option B: Local Docker (faster iteration)
-```bash
-export GCP_PROJECT_ID="your-project-id"
-./deploy-gcp.sh
-```
-
-**Pros:** Infrastructure as code, reproducible, team collaboration, manages IAM properly
-**Cons:** Learning curve, three-step process (infra → redis → app)
-
----
-
-#### Infrastructure Setup: Option B - Let Scripts Handle It
-
-**The deployment scripts can create infrastructure AND deploy the app in one step.**
-
-Skip to Option 1 or Option 2 below to let the scripts handle infrastructure setup automatically.
-
----
-
-#### Application Deployment: Option 1 - Local Docker Build
-
-**Builds Docker image locally and deploys to Cloud Run.**
-
-**What this does:**
-- Builds Docker image on your machine
-- Pushes to Google Container Registry
-- Deploys to Cloud Run
-- Passes secrets as environment variables (not Secret Manager)
-
-**Prerequisites:**
-```bash
-# Install gcloud CLI
-# https://cloud.google.com/sdk/docs/install
-
-# Authenticate with GCP
+# Prerequisites
 gcloud auth login
 gcloud auth configure-docker
 
-# Set required environment variables (these will be passed to Cloud Run)
+# Set your project and secrets
 export GCP_PROJECT_ID="your-gcp-project-id"
-export GCP_REGION="us-central1"  # optional, defaults to us-central1
-export ANTHROPIC_API_KEY="sk-ant-xxxxx"
-export GITHUB_TOKEN="ghp_xxxxx"
-export WEBHOOK_URL="https://discord.com/api/webhooks/xxxxx"  # optional
-```
-
-**Deploy:**
-```bash
-chmod +x deploy-gcp.sh
-./deploy-gcp.sh
-```
-
-**What it does:**
-1. Builds Docker image locally: `docker build -t gcr.io/$PROJECT_ID/architecture-kb-orchestrator .`
-2. Pushes to GCR: `docker push gcr.io/$PROJECT_ID/architecture-kb-orchestrator`
-3. Deploys to Cloud Run with `gcloud run deploy`, passing environment variables via `--set-env-vars`
-4. Configures: 512Mi memory, 1 CPU, 300s timeout, max 10 instances, unauthenticated access
-
-**Pros:** Faster builds, no GCP build quota usage, simpler for development
-**Cons:** Requires Docker locally, environment variables passed as flags (less secure)
-
----
-
-#### Application Deployment: Option 2 - Cloud Build
-
-**Builds Docker image remotely using Cloud Build and deploys to Cloud Run.**
-
-**What this does:**
-- Submits build to Cloud Build (builds in GCP, not locally)
-- Pushes to Google Container Registry
-- Deploys to Cloud Run
-- Uses Secret Manager for secrets (more secure)
-
-**Prerequisites:**
-```bash
-# Install gcloud CLI
-# https://cloud.google.com/sdk/docs/install
-
-# Authenticate with GCP
-gcloud auth login
-
-# Set project
-export GCP_PROJECT_ID="your-gcp-project-id"
-export GCP_REGION="us-central1"  # optional, defaults to us-central1
+export GCP_REGION="us-central1"
 
 # Create secrets in Secret Manager (one-time setup)
 export ANTHROPIC_API_KEY="sk-ant-xxxxx"
 export GITHUB_TOKEN="ghp_xxxxx"
-export WEBHOOK_URL="https://discord.com/api/webhooks/xxxxx"
+export WEBHOOK_URL="https://discord.com/api/webhooks/xxxxx"  # optional
 
 echo -n "$ANTHROPIC_API_KEY" | gcloud secrets create anthropic-api-key --data-file=-
 echo -n "$GITHUB_TOKEN" | gcloud secrets create github-token --data-file=-
 echo -n "$WEBHOOK_URL" | gcloud secrets create webhook-url --data-file=-
 
-# To update existing secrets
-echo -n "$ANTHROPIC_API_KEY" | gcloud secrets versions add anthropic-api-key --data-file=-
-echo -n "$GITHUB_TOKEN" | gcloud secrets versions add github-token --data-file=-
-echo -n "$WEBHOOK_URL" | gcloud secrets versions add webhook-url --data-file=-
-```
-
-**Deploy:**
-```bash
+# Deploy using Cloud Build
 chmod +x deploy-gcp-cloudbuild.sh
 ./deploy-gcp-cloudbuild.sh
 ```
 
-**What it does:**
-1. Validates that required secrets exist in Secret Manager
-2. Enables required GCP APIs (cloudbuild, run, secretmanager)
-3. Grants Cloud Run service account access to secrets
-4. Submits build to Cloud Build using `cloudbuild.yaml`
-5. Cloud Build: builds image, pushes to GCR, deploys to Cloud Run
-6. Cloud Run pulls secrets from Secret Manager at runtime
+**What this does:**
+- Builds Docker image in Cloud Build (no Docker required locally)
+- Deploys to Cloud Run with minimal configuration
+- Auto-scales from 0 instances based on traffic
+- Configures: 512Mi memory, 1 CPU, 300s timeout, max 10 instances
+- Pulls secrets from Secret Manager at runtime
 
-**Pros:** No Docker required locally, secrets managed securely, build logs in GCP, better for CI/CD
-**Cons:** Slower builds, uses Cloud Build quota, requires Secret Manager setup
+**Cost Estimate:** ~$1-5/month (just Cloud Run compute, no databases)
 
----
-
-#### View logs
+**View Logs:**
 ```bash
 # View recent logs
 gcloud logging read "resource.labels.service_name=architecture-kb-orchestrator" --limit 50
 
 # Stream logs in real-time
 gcloud logging tail "resource.labels.service_name=architecture-kb-orchestrator"
-
-# View Cloud Build logs (Cloud Build option only)
-gcloud builds list --limit=5
-gcloud builds log <BUILD_ID>
 ```
 
 ## Architecture

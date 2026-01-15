@@ -1,28 +1,38 @@
 """
 Skill: receive_change_notification (EVENT)
 
-Primary entry point for change notifications from source repositories.
-Triggers async triage analysis for all dependent repositories.
+Receive change notifications from source repositories.
+Orchestration is handled at the HTTP/webhook layer with BackgroundTasks.
 """
 import logging
+import json
 from typing import Any, Dict
+from pathlib import Path
 from orchestrator.a2a.base import BaseSkill, SkillCategory, SkillMetadata
-from orchestrator.a2a.task_queue import get_task_queue
-from orchestrator.a2a.tasks import execute_consumer_triage_sync, execute_template_triage_sync, get_relationships_config
 
 logger = logging.getLogger(__name__)
 
 
+def get_relationships_config() -> Dict:
+    """Load relationships configuration"""
+    config_path = Path(__file__).parent.parent.parent / "config" / "relationships.json"
+    with open(config_path) as f:
+        return json.load(f)
+
+
 class ReceiveChangeNotificationSkill(BaseSkill):
     """
-    Receive change notification from a source repository and orchestrate impact analysis.
+    Receive and validate change notifications from source repositories.
+
+    Note: Actual orchestration/triage is handled at the HTTP layer with BackgroundTasks.
+    This skill validates the notification and returns which dependents will be analyzed.
     """
 
     def get_metadata(self) -> SkillMetadata:
         return SkillMetadata(
             name="receive_change_notification",
             display_name="Receive Change Notification",
-            description="Process incoming change notifications and trigger impact analysis for dependent repositories",
+            description="Receive and validate change notifications - orchestration handled at HTTP layer",
             category=SkillCategory.EVENT,
             input_schema={
                 "type": "object",
@@ -66,30 +76,28 @@ class ReceiveChangeNotificationSkill(BaseSkill):
                         "enum": ["accepted", "no_relationships"]
                     },
                     "source_repo": {"type": "string"},
-                    "consumers_scheduled": {
-                        "type": "array",
-                        "items": {"type": "object"}
-                    },
-                    "derivatives_scheduled": {
-                        "type": "array",
-                        "items": {"type": "object"}
-                    },
-                    "total_dependents": {"type": "integer"}
+                    "dependents": {
+                        "type": "object",
+                        "properties": {
+                            "consumers": {"type": "array"},
+                            "derivatives": {"type": "array"}
+                        }
+                    }
                 }
             },
             requires_auth=False,
-            is_async=True
+            is_async=False
         )
 
     async def execute(self, input_data: Dict[str, Any]) -> Dict[str, Any]:
         """
-        Process change notification and schedule triage tasks.
+        Validate change notification and return dependents that will be analyzed.
 
         Args:
             input_data: Change event data
 
         Returns:
-            Status with scheduled tasks
+            Validation result with dependents list
         """
         source_repo = input_data['source_repo']
         logger.info(f"Received change notification from {source_repo}")
@@ -102,53 +110,23 @@ class ReceiveChangeNotificationSkill(BaseSkill):
             return {
                 "status": "no_relationships",
                 "source_repo": source_repo,
-                "consumers_scheduled": [],
-                "derivatives_scheduled": [],
-                "total_dependents": 0
+                "dependents": {
+                    "consumers": [],
+                    "derivatives": []
+                }
             }
 
         repo_config = config['relationships'][source_repo]
-        task_queue = get_task_queue()
+        consumers = [c['repo'] for c in repo_config.get('consumers', [])]
+        derivatives = [d['repo'] for d in repo_config.get('derivatives', [])]
 
-        consumers_scheduled = []
-        derivatives_scheduled = []
-
-        # Schedule consumer triage tasks
-        if 'consumers' in repo_config:
-            for consumer in repo_config['consumers']:
-                task_id = task_queue.enqueue_task(
-                    execute_consumer_triage_sync,
-                    source_repo=source_repo,
-                    consumer_repo=consumer['repo'],
-                    change_event=input_data,
-                    consumer_config=consumer
-                )
-                consumers_scheduled.append({
-                    "repo": consumer['repo'],
-                    "task_id": task_id
-                })
-                logger.info(f"Scheduled consumer triage for {consumer['repo']}: {task_id}")
-
-        # Schedule template triage tasks
-        if 'derivatives' in repo_config:
-            for derivative in repo_config['derivatives']:
-                task_id = task_queue.enqueue_task(
-                    execute_template_triage_sync,
-                    template_repo=source_repo,
-                    derivative_repo=derivative['repo'],
-                    change_event=input_data,
-                    derivative_config=derivative
-                )
-                derivatives_scheduled.append({
-                    "repo": derivative['repo'],
-                    "task_id": task_id
-                })
-                logger.info(f"Scheduled template triage for {derivative['repo']}: {task_id}")
+        logger.info(f"Identified {len(consumers)} consumers and {len(derivatives)} derivatives for {source_repo}")
 
         return {
             "status": "accepted",
             "source_repo": source_repo,
-            "consumers_scheduled": consumers_scheduled,
-            "derivatives_scheduled": derivatives_scheduled,
-            "total_dependents": len(consumers_scheduled) + len(derivatives_scheduled)
+            "dependents": {
+                "consumers": consumers,
+                "derivatives": derivatives
+            }
         }

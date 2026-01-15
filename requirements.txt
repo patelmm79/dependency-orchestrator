@@ -7,17 +7,5 @@ requests>=2.32.0
 pygithub>=2.4.0
 gitpython>=3.1.43
 
-# Task Queue Backends for A2A async processing
-# PostgreSQL (primary backend - recommended)
-psycopg2-binary>=2.9.0
-
-# Redis (secondary backend - optional fallback)
-redis>=5.0.0
-rq>=1.16.0
-hiredis>=2.3.0
-
-# Process management for web + worker
-supervisor>=4.2.5
-
 # For production
 gunicorn>=23.0.0

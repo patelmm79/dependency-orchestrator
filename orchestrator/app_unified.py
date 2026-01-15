@@ -6,7 +6,8 @@ This version provides:
 1. A2A protocol endpoints (/.well-known/agent.json, /a2a/*)
 2. Legacy webhook endpoints (/api/webhook/*, /api/test/*, /api/relationships)
 
-Both modes share the same triage agents and task queue infrastructure.
+Stateless architecture: Uses FastAPI BackgroundTasks for async processing.
+No database or task queue required - fully compatible with simple deployments.
 """
 
 import os
@@ -31,8 +32,6 @@ from orchestrator.clients.dev_nexus_client import DevNexusClient
 
 # Import A2A components
 from orchestrator.a2a.server import create_a2a_app, register_all_skills
-from orchestrator.a2a.task_queue import get_task_queue
-from orchestrator.a2a.tasks import execute_consumer_triage_sync, execute_template_triage_sync
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -173,13 +172,89 @@ async def get_repo_relationships(repo_owner: str, repo_name: str):
     return RELATIONSHIPS_CONFIG['relationships'][repo_full_name]
 
 
+# ============================================================================
+# BACKGROUND TASK PROCESSORS (for async triage)
+# ============================================================================
+
+async def process_consumer_relationship(event: ChangeEvent, consumer_config: Dict, source_config: Dict):
+    """Process API consumer dependency relationship in the background"""
+    try:
+        logger.info(f"Processing consumer relationship: {event.source_repo} -> {consumer_config['repo']}")
+
+        # Initialize consumer triage agent
+        agent = ConsumerTriageAgent(
+            anthropic_client=anthropic_client,
+            github_client=github_client,
+            dev_nexus_client=dev_nexus_client
+        )
+
+        # Run triage analysis
+        result = await agent.analyze(
+            source_repo=event.source_repo,
+            consumer_repo=consumer_config['repo'],
+            change_event=event.dict(),
+            consumer_config=consumer_config
+        )
+
+        logger.info(f"Triage result for {consumer_config['repo']}: action_required={result['requires_action']}, urgency={result['urgency']}")
+
+        # Post lesson learned to dev-nexus
+        if dev_nexus_client.enabled and result.get('reasoning'):
+            await dev_nexus_client.post_lesson_learned(
+                repo=event.source_repo,
+                lesson=f"Consumer impact analysis: {result['impact_summary']}",
+                source_commit=event.commit_sha,
+                confidence=result.get('confidence', 0.8),
+                category="consumer_triage"
+            )
+
+    except Exception as e:
+        logger.error(f"Error processing consumer relationship: {e}", exc_info=True)
+
+
+async def process_template_relationship(event: ChangeEvent, derivative_config: Dict, source_config: Dict):
+    """Process template fork relationship in the background"""
+    try:
+        logger.info(f"Processing template relationship: {event.source_repo} -> {derivative_config['repo']}")
+
+        # Initialize template triage agent
+        agent = TemplateTriageAgent(
+            anthropic_client=anthropic_client,
+            github_client=github_client,
+            dev_nexus_client=dev_nexus_client
+        )
+
+        # Run triage analysis
+        result = await agent.analyze(
+            template_repo=event.source_repo,
+            derivative_repo=derivative_config['repo'],
+            change_event=event.dict(),
+            derivative_config=derivative_config
+        )
+
+        logger.info(f"Triage result for {derivative_config['repo']}: action_required={result['requires_action']}, urgency={result['urgency']}")
+
+        # Post lesson learned to dev-nexus
+        if dev_nexus_client.enabled and result.get('reasoning'):
+            await dev_nexus_client.post_lesson_learned(
+                repo=event.source_repo,
+                lesson=f"Template sync analysis: {result['impact_summary']}",
+                source_commit=event.commit_sha,
+                confidence=result.get('confidence', 0.8),
+                category="template_triage"
+            )
+
+    except Exception as e:
+        logger.error(f"Error processing template relationship: {e}", exc_info=True)
+
+
 @app.post("/api/webhook/change-notification", dependencies=[Depends(verify_api_key)])
 async def handle_change_notification(event: ChangeEvent, background_tasks: BackgroundTasks):
     """
     LEGACY endpoint: Handle incoming change notifications from repositories.
     This is called by GitHub Actions after pattern analysis.
 
-    Now uses the new task queue infrastructure for background processing.
+    Uses BackgroundTasks for asynchronous processing (stateless, no task queue).
     """
     logger.info(f"[LEGACY] Received change notification from {event.source_repo}")
 
@@ -189,42 +264,33 @@ async def handle_change_notification(event: ChangeEvent, background_tasks: Backg
         return {"status": "no_relationships", "message": "No dependent repositories configured"}
 
     repo_config = RELATIONSHIPS_CONFIG['relationships'][event.source_repo]
-    task_queue = get_task_queue()
 
     consumers_scheduled = []
     derivatives_scheduled = []
 
-    # Schedule consumer triage tasks using new task queue
+    # Schedule consumer triage tasks using BackgroundTasks
     if 'consumers' in repo_config:
         for consumer in repo_config['consumers']:
-            task_id = task_queue.enqueue_task(
-                execute_consumer_triage_sync,
-                source_repo=event.source_repo,
-                consumer_repo=consumer['repo'],
-                change_event=event.dict(),
-                consumer_config=consumer
+            background_tasks.add_task(
+                process_consumer_relationship,
+                event,
+                consumer,
+                repo_config
             )
-            consumers_scheduled.append({
-                "repo": consumer['repo'],
-                "task_id": task_id
-            })
-            logger.info(f"Scheduled consumer triage for {consumer['repo']}: {task_id}")
+            consumers_scheduled.append(consumer['repo'])
+            logger.info(f"Scheduled consumer triage for {consumer['repo']}")
 
-    # Schedule template triage tasks using new task queue
+    # Schedule template triage tasks using BackgroundTasks
     if 'derivatives' in repo_config:
         for derivative in repo_config['derivatives']:
-            task_id = task_queue.enqueue_task(
-                execute_template_triage_sync,
-                template_repo=event.source_repo,
-                derivative_repo=derivative['repo'],
-                change_event=event.dict(),
-                derivative_config=derivative
+            background_tasks.add_task(
+                process_template_relationship,
+                event,
+                derivative,
+                repo_config
             )
-            derivatives_scheduled.append({
-                "repo": derivative['repo'],
-                "task_id": task_id
-            })
-            logger.info(f"Scheduled template triage for {derivative['repo']}: {task_id}")
+            derivatives_scheduled.append(derivative['repo'])
+            logger.info(f"Scheduled template triage for {derivative['repo']}")
 
     return {
         "status": "accepted",

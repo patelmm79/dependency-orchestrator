@@ -234,20 +234,14 @@ def register_all_skills():
         ReceiveChangeNotificationSkill,
         GetImpactAnalysisSkill,
         GetDependenciesSkill,
-        GetOrchestrationStatusSkill,
-        TriggerConsumerTriageSkill,
-        TriggerTemplateTriageSkill,
         AddDependencyRelationshipSkill,
     )
     from orchestrator.a2a.registry import register_skill
 
-    # Register all skills
+    # Register all skills (async skills removed - dev-nexus handles orchestration)
     register_skill(ReceiveChangeNotificationSkill())
     register_skill(GetImpactAnalysisSkill())
     register_skill(GetDependenciesSkill())
-    register_skill(GetOrchestrationStatusSkill())
-    register_skill(TriggerConsumerTriageSkill())
-    register_skill(TriggerTemplateTriageSkill())
     register_skill(AddDependencyRelationshipSkill())
 
     logger.info("All A2A skills registered")
