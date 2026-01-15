@@ -260,22 +260,17 @@ locals {
 }
 
 # ============================================================================
-# Workload Identity (for A2A protected skills in dev-nexus)
+# Service Account for Cloud Run (Workload Identity)
 # ============================================================================
-# Enables Cloud Run to authenticate to dev-nexus protected A2A skills
-# using Google-signed ID tokens (Workload Identity)
+# Cloud Run uses this service account to authenticate to dev-nexus protected A2A skills
+# via Google-signed ID tokens from the metadata server.
+# The service account is assigned to the Cloud Run service via service_account_name below.
+# No additional IAM role binding is needed - Cloud Run automatically provides identity tokens.
 
 resource "google_service_account" "orchestrator_identity" {
   account_id   = "orchestrator-a2a"
   display_name = "Orchestrator A2A Identity (Workload Identity)"
   description  = "Service account for Cloud Run to authenticate to dev-nexus A2A skills"
-}
-
-resource "google_cloud_run_service_iam_member" "workload_identity" {
-  service  = google_cloud_run_service.orchestrator.name
-  location = google_cloud_run_service.orchestrator.location
-  role     = "roles/iam.workloadIdentityUser"
-  member   = "serviceAccount:${google_service_account.orchestrator_identity.email}"
 }
 
 # Cloud Run service
