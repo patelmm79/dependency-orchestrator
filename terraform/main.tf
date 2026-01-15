@@ -259,6 +259,25 @@ locals {
   image_name = "gcr.io/${var.project_id}/${var.service_name}:latest"
 }
 
+# ============================================================================
+# Workload Identity (for A2A protected skills in dev-nexus)
+# ============================================================================
+# Enables Cloud Run to authenticate to dev-nexus protected A2A skills
+# using Google-signed ID tokens (Workload Identity)
+
+resource "google_service_account" "orchestrator_identity" {
+  account_id   = "${var.service_name}-identity"
+  display_name = "Orchestrator A2A Identity (Workload Identity)"
+  description  = "Service account for Cloud Run to authenticate to dev-nexus A2A skills"
+}
+
+resource "google_cloud_run_service_iam_member" "workload_identity" {
+  service  = google_cloud_run_service.orchestrator.name
+  location = google_cloud_run_service.orchestrator.location
+  role     = "roles/iam.workloadIdentityUser"
+  member   = "serviceAccount:${google_service_account.orchestrator_identity.email}"
+}
+
 # Cloud Run service
 resource "google_cloud_run_service" "orchestrator" {
   name     = var.service_name
@@ -278,7 +297,8 @@ resource "google_cloud_run_service" "orchestrator" {
     }
 
     spec {
-      service_account_name = "${data.google_project.project.number}-compute@developer.gserviceaccount.com"
+      # Use Workload Identity service account for A2A protected skills
+      service_account_name = google_service_account.orchestrator_identity.email
 
       containers {
         image = var.auto_build ? local.image_name : var.container_image
@@ -356,6 +376,7 @@ resource "google_cloud_run_service" "orchestrator" {
     google_secret_manager_secret_iam_member.anthropic_api_key_access,
     google_secret_manager_secret_iam_member.github_token_access,
     google_secret_manager_secret_iam_member.webhook_url_access,
+    google_cloud_run_service_iam_member.workload_identity,
     null_resource.build_image,
   ]
 

@@ -1,14 +1,21 @@
 """
-Dev-Nexus Knowledge Base Client
+Dev-Nexus A2A Client
 
-This client integrates with dev-nexus to:
-- Query deployment patterns and architecture context
+This client integrates with dev-nexus via A2A protocol to:
+- Query repository dependencies (get_deployment_info skill)
+- Update relationships (update_dependency_info skill)
 - Post lessons learned from triage analysis
 - Retrieve cross-repo pattern insights
+
+Authentication:
+- Public skills (get_deployment_info): No authentication required
+- Protected skills (update_dependency_info): Requires Google OAuth2 ID token (Workload Identity)
 """
 
 import logging
 import httpx
+import os
+import time
 from typing import Dict, Optional, List
 import json
 
@@ -16,11 +23,11 @@ logger = logging.getLogger(__name__)
 
 
 class DevNexusClient:
-    """Client for interacting with dev-nexus knowledge base"""
+    """Client for interacting with dev-nexus via A2A protocol"""
 
     def __init__(self, base_url: Optional[str] = None):
         """
-        Initialize dev-nexus client
+        Initialize dev-nexus A2A client
 
         Args:
             base_url: Base URL of dev-nexus service (e.g., https://dev-nexus-xxx.run.app)
@@ -28,21 +35,215 @@ class DevNexusClient:
         """
         self.base_url = base_url
         self.enabled = base_url is not None and base_url != ""
+        self._workload_identity_token_cache = None
+        self._token_cache_time = 0
+        self._token_cache_duration = 3300  # 55 minutes (ID tokens valid for 1 hour)
 
         if self.enabled:
-            logger.info(f"Dev-nexus integration enabled: {base_url}")
+            logger.info(f"Dev-nexus A2A integration enabled: {base_url}")
         else:
             logger.info("Dev-nexus integration disabled (no URL configured)")
 
-    async def get_deployment_patterns(self, repo: str) -> Optional[Dict]:
+    async def _get_workload_identity_token(self) -> Optional[str]:
         """
-        Query dev-nexus for deployment patterns of a repository
+        Get Google ID token for Cloud Run Workload Identity authentication.
+
+        This token is used to authenticate to protected dev-nexus A2A skills.
+        Cloud Run automatically provides this via Workload Identity.
+
+        See: https://cloud.google.com/run/docs/securing/service-identity
+        """
+        if not self.enabled:
+            return None
+
+        try:
+            # Check cache (valid for ~55 minutes)
+            now = time.time()
+            if self._workload_identity_token_cache and (now - self._token_cache_time) < self._token_cache_duration:
+                return self._workload_identity_token_cache
+
+            # Cloud Run provides metadata endpoint automatically
+            # Can also use environment variable for explicit configuration
+            token_url = os.getenv(
+                "GOOGLE_IDENTITY_ENDPOINT",
+                "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity"
+            )
+
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                response = await client.get(
+                    token_url,
+                    headers={"Metadata-Flavor": "Google"},
+                    params={"audience": self.base_url}
+                )
+
+                if response.status_code == 200:
+                    token = response.text
+                    self._workload_identity_token_cache = token
+                    self._token_cache_time = now
+                    logger.debug("Retrieved Workload Identity token")
+                    return token
+                else:
+                    logger.warning(f"Failed to get Workload Identity token: HTTP {response.status_code}")
+                    return None
+
+        except Exception as e:
+            logger.warning(f"Error getting Workload Identity token (running locally?): {e}")
+            # This is expected when running locally without Workload Identity
+            return None
+
+    async def call_a2a_skill(
+        self,
+        skill_name: str,
+        input_data: Dict,
+        requires_auth: bool = False
+    ) -> Optional[Dict]:
+        """
+        Execute an A2A skill on dev-nexus.
 
         Args:
-            repo: Repository name (e.g., "patelmm79/vllm-container-ngc")
+            skill_name: Name of the A2A skill to execute
+            input_data: Input data for the skill
+            requires_auth: Whether the skill requires authentication
 
         Returns:
-            Dict with deployment patterns or None if unavailable
+            Skill response data or None if failed
+        """
+        if not self.enabled:
+            logger.warning("Dev-nexus not configured, skipping A2A skill call")
+            return None
+
+        try:
+            headers = {"Content-Type": "application/json"}
+
+            # Add authentication if required
+            if requires_auth:
+                token = await self._get_workload_identity_token()
+                if token:
+                    headers["Authorization"] = f"Bearer {token}"
+                else:
+                    logger.warning(f"Skipping authenticated skill '{skill_name}': no Workload Identity token available")
+                    return None
+
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    f"{self.base_url}/a2a/execute",
+                    json={
+                        "skill_name": skill_name,
+                        "input_data": input_data
+                    },
+                    headers=headers
+                )
+
+                if response.status_code == 200:
+                    result = response.json()
+                    logger.debug(f"A2A skill '{skill_name}' executed successfully")
+                    return result.get("data", result)
+                else:
+                    logger.warning(
+                        f"A2A skill '{skill_name}' failed: HTTP {response.status_code}\n{response.text}"
+                    )
+                    return None
+
+        except Exception as e:
+            logger.error(f"Error calling A2A skill '{skill_name}': {e}")
+            return None
+
+    # ========================================================================
+    # A2A Skills (via dev-nexus)
+    # ========================================================================
+
+    async def get_repository_dependencies(self, repo: str) -> Optional[Dict]:
+        """
+        Query dev-nexus for current repository dependencies.
+
+        Uses the public 'get_deployment_info' A2A skill (no authentication required).
+        Returns consumers, derivatives, and external dependencies with confidence scores.
+
+        Args:
+            repo: Repository name (e.g., "owner/repo")
+
+        Returns:
+            Dict with:
+            - consumers: List of consuming repositories
+            - derivatives: List of derivative repositories
+            - external_dependencies: List of external packages
+            Or None if failed
+        """
+        if not self.enabled:
+            return None
+
+        response = await self.call_a2a_skill(
+            skill_name="get_deployment_info",
+            input_data={
+                "repository": repo,
+                "include_lessons": True,
+                "include_history": False
+            },
+            requires_auth=False  # Public skill
+        )
+
+        if response:
+            return {
+                "consumers": response.get("consumers", []),
+                "derivatives": response.get("derivatives", []),
+                "external_dependencies": response.get("external_dependencies", []),
+                "metadata": response.get("metadata", {})
+            }
+        return None
+
+    async def update_dependency_relationship(
+        self,
+        source_repo: str,
+        target_repo: str,
+        relationship_type: str,
+        config: Dict
+    ) -> Optional[Dict]:
+        """
+        Update dependency relationship in dev-nexus.
+
+        Uses the protected 'update_dependency_info' A2A skill (requires Workload Identity).
+
+        Args:
+            source_repo: Source repository (provider)
+            target_repo: Target repository (consumer/derivative)
+            relationship_type: "api_consumer" or "template_fork"
+            config: Relationship configuration dict
+
+        Returns:
+            Response from skill or None if failed
+        """
+        if not self.enabled:
+            return None
+
+        response = await self.call_a2a_skill(
+            skill_name="update_dependency_info",
+            input_data={
+                "source_repo": source_repo,
+                "target_repo": target_repo,
+                "relationship_type": relationship_type,
+                "metadata": {
+                    "interface_files": config.get("interface_files", []),
+                    "change_triggers": config.get("change_triggers", []),
+                    "urgency_mapping": config.get("urgency_mapping", {}),
+                    "shared_concerns": config.get("shared_concerns", []),
+                    "divergent_concerns": config.get("divergent_concerns", []),
+                    "sync_strategy": config.get("sync_strategy", "sync_on_conflict_free")
+                }
+            },
+            requires_auth=True  # Protected skill
+        )
+
+        return response
+
+    # ========================================================================
+    # Legacy Methods (kept for backward compatibility)
+    # ========================================================================
+
+    async def get_deployment_patterns(self, repo: str) -> Optional[Dict]:
+        """
+        Query dev-nexus for deployment patterns of a repository.
+
+        DEPRECATED: Use get_repository_dependencies() instead.
         """
         if not self.enabled:
             return None
@@ -73,7 +274,7 @@ class DevNexusClient:
 
     async def get_patterns(self, repo: str) -> Optional[Dict]:
         """
-        Query dev-nexus for code patterns of a repository
+        Query dev-nexus for code patterns of a repository.
 
         Args:
             repo: Repository name

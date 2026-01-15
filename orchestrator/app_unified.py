@@ -173,6 +173,60 @@ async def get_repo_relationships(repo_owner: str, repo_name: str):
 
 
 # ============================================================================
+# RELATIONSHIP RESOLUTION (Dev-Nexus Integration)
+# ============================================================================
+
+async def get_repository_relationships(repo: str) -> Optional[Dict]:
+    """
+    Get repository relationships from dev-nexus via A2A protocol.
+
+    This queries dev-nexus for the current dependency graph, enabling
+    dynamic relationship management without redeploys.
+
+    Fallback: If dev-nexus is unavailable, loads from relationships.json.
+
+    Returns:
+        Dict with 'consumers' and 'derivatives' lists, or None if not found.
+    """
+    # Try dev-nexus first (A2A protocol - no auth required)
+    if dev_nexus_client.enabled:
+        try:
+            logger.info(f"Querying dev-nexus for relationships: {repo}")
+            deps = await dev_nexus_client.get_repository_dependencies(repo)
+
+            if deps:
+                # Convert dev-nexus format to orchestrator format
+                return {
+                    "consumers": [
+                        {
+                            "repo": c.get("repo", c.get("name")),
+                            "metadata": c.get("metadata", {})
+                        }
+                        for c in deps.get("consumers", [])
+                    ],
+                    "derivatives": [
+                        {
+                            "repo": d.get("repo", d.get("name")),
+                            "metadata": d.get("metadata", {})
+                        }
+                        for d in deps.get("derivatives", [])
+                    ]
+                }
+        except Exception as e:
+            logger.warning(f"Failed to query dev-nexus for {repo}, falling back to config: {e}")
+
+    # Fallback: Load from relationships.json
+    if repo in RELATIONSHIPS_CONFIG['relationships']:
+        repo_config = RELATIONSHIPS_CONFIG['relationships'][repo]
+        return {
+            "consumers": repo_config.get('consumers', []),
+            "derivatives": repo_config.get('derivatives', [])
+        }
+
+    return None
+
+
+# ============================================================================
 # BACKGROUND TASK PROCESSORS (for async triage)
 # ============================================================================
 
@@ -251,52 +305,59 @@ async def process_template_relationship(event: ChangeEvent, derivative_config: D
 @app.post("/api/webhook/change-notification", dependencies=[Depends(verify_api_key)])
 async def handle_change_notification(event: ChangeEvent, background_tasks: BackgroundTasks):
     """
-    LEGACY endpoint: Handle incoming change notifications from repositories.
+    Handle incoming change notifications from repositories.
     This is called by GitHub Actions after pattern analysis.
+
+    Queries dev-nexus for current relationships (via A2A protocol).
+    Fallback: Uses relationships.json if dev-nexus unavailable.
 
     Uses BackgroundTasks for asynchronous processing (stateless, no task queue).
     """
-    logger.info(f"[LEGACY] Received change notification from {event.source_repo}")
+    logger.info(f"Received change notification from {event.source_repo}")
 
-    # Check if this repo has any relationships
-    if event.source_repo not in RELATIONSHIPS_CONFIG['relationships']:
+    # Query relationships from dev-nexus with fallback to config
+    repo_relationships = await get_repository_relationships(event.source_repo)
+
+    if not repo_relationships:
         logger.info(f"No relationships configured for {event.source_repo}")
-        return {"status": "no_relationships", "message": "No dependent repositories configured"}
-
-    repo_config = RELATIONSHIPS_CONFIG['relationships'][event.source_repo]
+        return {
+            "status": "no_relationships",
+            "source_repo": event.source_repo,
+            "message": "No dependent repositories configured"
+        }
 
     consumers_scheduled = []
     derivatives_scheduled = []
 
     # Schedule consumer triage tasks using BackgroundTasks
-    if 'consumers' in repo_config:
-        for consumer in repo_config['consumers']:
-            background_tasks.add_task(
-                process_consumer_relationship,
-                event,
-                consumer,
-                repo_config
-            )
-            consumers_scheduled.append(consumer['repo'])
-            logger.info(f"Scheduled consumer triage for {consumer['repo']}")
+    for consumer in repo_relationships.get('consumers', []):
+        background_tasks.add_task(
+            process_consumer_relationship,
+            event,
+            consumer,
+            repo_relationships
+        )
+        consumers_scheduled.append(consumer['repo'])
+        logger.info(f"Scheduled consumer triage for {consumer['repo']}")
 
     # Schedule template triage tasks using BackgroundTasks
-    if 'derivatives' in repo_config:
-        for derivative in repo_config['derivatives']:
-            background_tasks.add_task(
-                process_template_relationship,
-                event,
-                derivative,
-                repo_config
-            )
-            derivatives_scheduled.append(derivative['repo'])
-            logger.info(f"Scheduled template triage for {derivative['repo']}")
+    for derivative in repo_relationships.get('derivatives', []):
+        background_tasks.add_task(
+            process_template_relationship,
+            event,
+            derivative,
+            repo_relationships
+        )
+        derivatives_scheduled.append(derivative['repo'])
+        logger.info(f"Scheduled template triage for {derivative['repo']}")
 
     return {
         "status": "accepted",
         "source_repo": event.source_repo,
-        "consumers_scheduled": consumers_scheduled,
-        "derivatives_scheduled": derivatives_scheduled,
+        "dependents": {
+            "consumers": consumers_scheduled,
+            "derivatives": derivatives_scheduled
+        },
         "total_dependents": len(consumers_scheduled) + len(derivatives_scheduled)
     }
 
