@@ -292,8 +292,9 @@ resource "google_cloud_run_service" "orchestrator" {
     }
 
     spec {
-      # Use Workload Identity service account for A2A protected skills
-      service_account_name = google_service_account.orchestrator_identity.email
+      # Use default compute service account for now (has access to all required secrets)
+      # TODO: Migrate to orchestrator-a2a service account once startup probe issues are resolved
+      service_account_name = "${data.google_project.project.number}-compute@developer.gserviceaccount.com"
 
       containers {
         image = var.auto_build ? local.image_name : var.container_image
