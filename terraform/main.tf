@@ -266,7 +266,7 @@ locals {
 # using Google-signed ID tokens (Workload Identity)
 
 resource "google_service_account" "orchestrator_identity" {
-  account_id   = "${var.service_name}-identity"
+  account_id   = "orchestrator-a2a"
   display_name = "Orchestrator A2A Identity (Workload Identity)"
   description  = "Service account for Cloud Run to authenticate to dev-nexus A2A skills"
 }
