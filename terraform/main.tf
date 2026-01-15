@@ -184,29 +184,29 @@ data "google_project" "project" {
   depends_on = [google_project_service.required_apis]
 }
 
-# Grant Cloud Run service account access to secrets
+# Grant Cloud Run service account (orchestrator-a2a) access to secrets
 resource "google_secret_manager_secret_iam_member" "anthropic_api_key_access" {
   secret_id = local.anthropic_api_key_secret.secret_id
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${data.google_project.project.number}-compute@developer.gserviceaccount.com"
+  member    = "serviceAccount:${google_service_account.orchestrator_identity.email}"
 }
 
 resource "google_secret_manager_secret_iam_member" "github_token_access" {
   secret_id = local.github_token_secret.secret_id
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${data.google_project.project.number}-compute@developer.gserviceaccount.com"
+  member    = "serviceAccount:${google_service_account.orchestrator_identity.email}"
 }
 
 resource "google_secret_manager_secret_iam_member" "webhook_url_access" {
   secret_id = local.webhook_url_secret.secret_id
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${data.google_project.project.number}-compute@developer.gserviceaccount.com"
+  member    = "serviceAccount:${google_service_account.orchestrator_identity.email}"
 }
 
 resource "google_secret_manager_secret_iam_member" "orchestrator_api_key_access" {
   secret_id = local.orchestrator_api_key_secret.secret_id
   role      = "roles/secretmanager.secretAccessor"
-  member    = "serviceAccount:${data.google_project.project.number}-compute@developer.gserviceaccount.com"
+  member    = "serviceAccount:${google_service_account.orchestrator_identity.email}"
 }
 
 # ============================================================================
